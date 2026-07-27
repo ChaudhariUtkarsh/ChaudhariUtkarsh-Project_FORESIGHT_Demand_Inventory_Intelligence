@@ -1,0 +1,23 @@
+pandas==2.2.3                  # Data Manipulation
+numpy==2.2.0                   
+
+matplotlib==3.10.0             # Data Visualization
+seaborn==0.13.2
+plotly==6.0.0                  
+
+scikit-learn==1.6.1            # Machine Learning
+joblib==1.4.2                  
+
+streamlit==1.44.1              # Dashboard           
+
+jupyter==1.1.1                 # Notebook
+notebook==7.3.2
+
+openpyxl==3.1.5                # Excel Support
+
+lightgbm==4.6.0                # Time Series Forecasting
+xgboost==2.1.4
+statsmodels==0.14.4
+
+prophet==1.1.6                 # Utilities
+requests==2.32.3

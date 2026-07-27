@@ -1,0 +1,23 @@
+{
+    "model_name": "LightGBM Regressor",
+    "project_name": "Project FORESIGHT",
+    "evaluation_date": "2026-07-25",
+
+    "metrics": {
+        "MAE": 18.42,
+        "RMSE": 24.16,
+        "MAPE": 7.21,
+        "WAPE": 6.84,
+        "R2": 0.94
+    },
+
+    "training": {
+        "train_samples": 58400,
+        "test_samples": 14600,
+        "total_samples": 73000,
+        "train_test_split": "80:20",
+        "random_state": 42
+    },
+
+    "status": "Success"
+}
