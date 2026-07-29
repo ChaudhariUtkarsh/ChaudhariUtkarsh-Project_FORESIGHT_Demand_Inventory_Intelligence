@@ -1,64 +1,86 @@
-"""
-Project FORESIGHT
-Demand & Inventory Intelligence
-
-Author : Utkarsh Chaudhari
-"""
-
-import os
-from datetime import datetime
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from typing import Optional
+from predict import DemandPredictor
 
 
-class ProjectInfo:
-    PROJECT_NAME = "Project FORESIGHT"
-    VERSION = "1.0"
-
-    def __init__(self):
-        self.project_path = os.getcwd()
-        self.start_time = datetime.now()
-
-    def display(self):
-        print("=" * 60)
-        print(f"{self.PROJECT_NAME:^60}")
-        print("=" * 60)
-        print("Demand & Inventory Intelligence")
-        print("-" * 60)
-        print(f"Version      : {self.VERSION}")
-        print(f"Project Path : {self.project_path}")
-        print(f"Started At   : {self.start_time.strftime('%d-%m-%Y %H:%M:%S')}")
-        print("=" * 60)
+# FastAPI Application
+app = FastAPI(
+    title="Project FORESIGHT API",
+    description="AI-Powered Demand Forecasting & Inventory Intelligence API",
+    version="1.0.0"
+)
 
 
-def check_project_structure():
-    folders = [
-        "data",
-        "data/raw",
-        "data/processed",
-        "src",
-        "models",
-        "reports",
-        "outputs",
-        "notebooks",
-        "app"
-    ]
-
-    print("\nChecking Project Structure...\n")
-
-    for folder in folders:
-        if os.path.exists(folder):
-            print(f"[OK] {folder}")
-        else:
-            print(f"[Missing] {folder}")
+# Load Predictor
+try:
+    predictor = DemandPredictor()
+except Exception as e:
+    predictor = None
+    print(f"Model loading warning: {e}")
 
 
-def main():
-    project = ProjectInfo()
-    project.display()
-    check_project_structure()
+# Request Schema
+class PredictionRequest(BaseModel):
 
-    print("\nProject setup completed successfully.")
-    print("Ready for Data Pipeline Development.")
+    year: int
+    month: int
+    week: int
+    day: int
+    day_of_week: int
+    quarter: int
+    is_weekend: int
+
+    lag_1: float
+    lag_7: float
+    lag_14: float
+
+    rolling_mean_7: float
+    rolling_std_7: float
+    rolling_mean_30: float
+
+    price_difference: float
+    discount_percentage: float
+
+    inventory_gap: float
+    total_inventory: float
+
+    on_hand_units: float
+    on_order_units: float
+    reorder_point: float
+
+    sku_id: Optional[str] = None
 
 
+# Health Check
+@app.get("/")
+def home():
+    return {"project": "Project FORESIGHT", "status": "running", "message": "Demand Forecasting API is running"}
+
+
+# API Health
+@app.get("/health")
+def health():
+    return {"status": "healthy", "model_loaded": predictor is not None}
+
+
+# Prediction API
+@app.post("/predict")
+def predict(request: PredictionRequest):
+    if predictor is None:
+        raise HTTPException(status_code=500, detail="Prediction model is not loaded.")
+
+    try:
+        input_data = request.model_dump()
+        prediction = predictor.predict(input_data)
+
+        return {"status": "success", "sku_id": request.sku_id, "predicted_units": prediction}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Run API
 if __name__ == "__main__":
-    main()
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
