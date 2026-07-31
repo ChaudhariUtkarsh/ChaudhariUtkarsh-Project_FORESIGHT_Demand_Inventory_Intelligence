@@ -2,10 +2,7 @@ import logging
 import numpy as np
 import pandas as pd
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -21,38 +18,25 @@ class FeatureEngineering:
         self.df["day"] = self.df["date"].dt.day
         self.df["day_of_week"] = self.df["date"].dt.dayofweek
         self.df["quarter"] = self.df["date"].dt.quarter
-        self.df["is_weekend"] = (
-            self.df["day_of_week"] >= 5
-        ).astype(int)
+        self.df["is_weekend"] = (self.df["day_of_week"] >= 5).astype(int)
 
     def create_lag_features(self):
         logger.info("Creating Lag Features...")
-        self.df = self.df.sort_values(
-            ["sku_id", "date"]
-        )
+        self.df = self.df.sort_values(["sku_id", "date"])
+        self.df["lag_1"] = (self.df.groupby("sku_id")["units_sold"].shift(1))
+        self.df["lag_7"] = (self.df.groupby("sku_id")["units_sold"].shift(7))
+        self.df["lag_14"] = (self.df.groupby("sku_id")["units_sold"].shift(14))
 
-        self.df["lag_1"] = (
-            self.df.groupby("sku_id")["units_sold"]
-            .shift(1)
-        )
-
-        self.df["lag_7"] = (
-            self.df.groupby("sku_id")["units_sold"]
-            .shift(7)
-        )
-
-        self.df["lag_14"] = (
-            self.df.groupby("sku_id")["units_sold"]
-            .shift(14)
-        )
 
     def create_rolling_features(self):
         logger.info("Creating Rolling Features...")
+
         self.df["rolling_mean_7"] = (
             self.df.groupby("sku_id")["units_sold"]
             .transform(
                 lambda x:
-                x.rolling(7).mean()
+                x.shift(1)
+                .rolling(window=7, min_periods=1).mean()
             )
         )
 
@@ -60,7 +44,8 @@ class FeatureEngineering:
             self.df.groupby("sku_id")["units_sold"]
             .transform(
                 lambda x:
-                x.rolling(7).std()
+                x.shift(1)
+                .rolling(window=7, min_periods=1).std()
             )
         )
 
@@ -68,40 +53,22 @@ class FeatureEngineering:
             self.df.groupby("sku_id")["units_sold"]
             .transform(
                 lambda x:
-                x.rolling(30).mean()
+                x.shift(1)
+                .rolling(window=30, min_periods=1).mean()
             )
         )
+
 
     def create_price_features(self):
         logger.info("Creating Price Features...")
         if "unit_price" in self.df.columns:
-            self.df["price_difference"] = (
-                self.df["list_price"]
-                - self.df["unit_price"]
-            )
-
-            self.df["discount_percentage"] = (
-                (
-                    self.df["list_price"]
-                    - self.df["unit_price"]
-                )
-                /
-                self.df["list_price"]
-            ) * 100
+            self.df["price_difference"] = (self.df["list_price"] - self.df["unit_price"])
+            self.df["discount_percentage"] = ((self.df["list_price"] - self.df["unit_price"]) / self.df["list_price"]) * 100
 
     def create_inventory_features(self):
         logger.info("Creating Inventory Features...")
-        self.df["inventory_gap"] = (
-            self.df["on_hand_units"]
-            -
-            self.df["reorder_point"]
-        )
-
-        self.df["total_inventory"] = (
-            self.df["on_hand_units"]
-            +
-            self.df["on_order_units"]
-        )
+        self.df["inventory_gap"] = (self.df["on_hand_units"] - self.df["reorder_point"])
+        self.df["total_inventory"] = (self.df["on_hand_units"] + self.df["on_order_units"])
 
     def fill_missing_values(self):
         logger.info("Handling Missing Values...")
@@ -109,9 +76,7 @@ class FeatureEngineering:
 
     def remove_invalid_rows(self):
         logger.info("Removing Invalid Records...")
-        self.df = self.df[
-            self.df["units_sold"] >= 0
-        ]
+        self.df = self.df[self.df["units_sold"] >= 0]
 
     def build_features(self):
         logger.info("Starting Feature Engineering...")
@@ -122,8 +87,10 @@ class FeatureEngineering:
         self.create_inventory_features()
         self.remove_invalid_rows()
         self.fill_missing_values()
+        self.df = self.df.sort_values(["date", "sku_id"]).reset_index(drop=True)
         logger.info("Feature Engineering Completed.")
         return self.df
+
 
 if __name__ == "__main__":
     from data_loader import DataLoader

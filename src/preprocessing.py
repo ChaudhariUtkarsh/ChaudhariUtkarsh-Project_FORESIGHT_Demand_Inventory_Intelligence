@@ -38,16 +38,16 @@ class DataPreprocessor:
     def convert_datatypes(self):
         logger.info("Converting data types...")
         if "date" in self.sales.columns:
-            self.sales["date"] = pd.to_datetime(self.sales["date"])
+            self.sales["date"] = pd.to_datetime(self.sales["date"], dayfirst=True)
 
         if "date" in self.calendar.columns:
             self.calendar["date"] = pd.to_datetime(
-                self.calendar["date"]
+                self.calendar["date"], dayfirst=True
             )
 
         if "date" in self.inventory.columns:
             self.inventory["date"] = pd.to_datetime(
-                self.inventory["date"]
+                self.inventory["date"], dayfirst=True
             )
 
         if "launch_date" in self.sku.columns:
@@ -80,8 +80,13 @@ class DataPreprocessor:
     def save_processed_data(
         self,
         dataframe,
-        output_path="data/processed"
+        output_path=None
     ):
+        if output_path is None:
+            output_path = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                "data", "processed"
+            )
 
         os.makedirs(output_path, exist_ok=True)
 

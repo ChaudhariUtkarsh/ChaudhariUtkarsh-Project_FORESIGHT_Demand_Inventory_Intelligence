@@ -5,7 +5,6 @@ import joblib
 import numpy as np
 import pandas as pd
 
-from sklearn.model_selection import TimeSeriesSplit
 from sklearn.preprocessing import LabelEncoder
 from xgboost import XGBRegressor
 from lightgbm import LGBMRegressor
@@ -16,10 +15,7 @@ from feature_engineering import FeatureEngineering
 from evaluate import ModelEvaluator
 
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -33,30 +29,70 @@ FEATURES = [
 ]
 
 TARGET    = "units_sold"
-MODEL_DIR = "models"
+MODEL_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "models")
 
 
 def compute_wape(y_true, y_pred):
     y_true = np.array(y_true)
     y_pred = np.array(y_pred)
-    return (np.sum(np.abs(y_true - y_pred)) / np.sum(np.abs(y_true))) * 100
+    denom  = np.sum(np.abs(y_true))
+    return (np.sum(np.abs(y_true - y_pred)) / denom) * 100 if denom > 0 else 0.0
 
 
 def baseline_wape(y_true, season_length=7):
     """Seasonal Naive: predict value from `season_length` steps ago."""
     y_true  = np.array(y_true)
-    y_naive = np.concatenate([
-        np.full(season_length, np.nan),
-        y_true[:-season_length]
-    ])
+    y_naive = np.concatenate([np.full(season_length, np.nan), y_true[:-season_length]])
     mask = ~np.isnan(y_naive)
     return compute_wape(y_true[mask], y_naive[mask])
 
 
+def rolling_origin_splits(dates, n_splits=5):
+    """
+    Date-based rolling-origin splits.
+
+    Divides the full date range into (n_splits + 1) equal windows.
+    Each fold expands the training window by one window and validates on the immediately following window — no data leakage.
+
+    Fold 1 : Train [window 0]            Val [window 1]
+    Fold 2 : Train [window 0-1]          Val [window 2]
+    Fold 3 : Train [window 0-2]          Val [window 3]
+    Fold 4 : Train [window 0-3]          Val [window 4]
+    Fold 5 : Train [window 0-4]          Val [window 5]
+
+    Yields
+    ------
+    fold        : int
+    train_mask  : boolean Series
+    val_mask    : boolean Series
+    train_start : date
+    train_end   : date
+    val_start   : date
+    val_end     : date
+    """
+    unique_dates = np.sort(dates.unique())
+    total_days   = len(unique_dates)
+    window_size  = total_days // (n_splits + 1)
+
+    for fold in range(1, n_splits + 1):
+        train_end_idx = fold * window_size - 1
+        val_end_idx   = min((fold + 1) * window_size - 1, total_days - 1)
+        train_dates = unique_dates[:train_end_idx + 1]
+        val_dates   = unique_dates[train_end_idx + 1 : val_end_idx + 1]
+
+        if len(val_dates) == 0:
+            continue
+
+        train_mask = dates.isin(train_dates)
+        val_mask   = dates.isin(val_dates)
+        yield (fold, train_mask, val_mask, train_dates[0],  train_dates[-1], val_dates[0],    val_dates[-1])
+
+
 class ModelTrainer:
     def __init__(self, df):
-        self.df = df.copy()
-        self.le = LabelEncoder()
+        self.df       = df.copy().sort_values("date").reset_index(drop=True)
+        self.le       = LabelEncoder()
+        self.features = None
         os.makedirs(MODEL_DIR, exist_ok=True)
 
     def prepare_xy(self):
@@ -66,98 +102,139 @@ class ModelTrainer:
         if "sku_id" in df.columns:
             df["sku_id_enc"] = self.le.fit_transform(df["sku_id"].astype(str))
             joblib.dump(self.le, os.path.join(MODEL_DIR, "label_encoder.pkl"))
+            logger.info("label_encoder.pkl saved.")
 
         features = [f for f in FEATURES if f in df.columns]
         if "sku_id_enc" in df.columns:
             features.append("sku_id_enc")
 
-        X = df[features].values
-        y = df[TARGET].values
-        return X, y, features
+        self.features = features
+        self.df       = df          # keep encoded df for rolling-origin
+        return df, features
 
-    def cross_validate(self, model, X, y, n_splits=5):
-        """TimeSeriesSplit cross-validation — returns mean WAPE across folds."""
-        tscv  = TimeSeriesSplit(n_splits=n_splits)
+    def rolling_origin_cv(self, model_cls, model_kwargs, n_splits=5):
+        """
+        Proper date-based rolling-origin cross-validation.
+
+        - Trains on all past dates up to train_end
+        - Validates on the immediately following date window
+        - Prints fold-level details: date ranges + WAPE
+        - Returns mean WAPE and per-fold WAPE list
+        """
+        df    = self.df
+        dates = df["date"]
         wapes = []
 
-        for fold, (train_idx, val_idx) in enumerate(tscv.split(X), 1):
-            X_tr, X_val = X[train_idx], X[val_idx]
-            y_tr, y_val = y[train_idx], y[val_idx]
+        print(f"\n  {'Fold':<6} {'Train Start':<14} {'Train End':<14} "
+              f"{'Val Start':<14} {'Val End':<14} {'WAPE':>8}")
+        print("  " + "-" * 74)
 
-            model.fit(X_tr, y_tr)
-            y_pred = np.maximum(model.predict(X_val), 0)
-            w = compute_wape(y_val, y_pred)
+        for fold, train_mask, val_mask, tr_s, tr_e, vl_s, vl_e in \
+                rolling_origin_splits(dates, n_splits):
+
+            X_tr = df.loc[train_mask, self.features].values
+            y_tr = df.loc[train_mask, TARGET].values
+            X_vl = df.loc[val_mask,   self.features].values
+            y_vl = df.loc[val_mask,   TARGET].values
+
+            if len(y_vl) == 0:
+                continue
+
+            m = model_cls(**model_kwargs)
+            m.fit(X_tr, y_tr)
+            y_pred = np.maximum(m.predict(X_vl), 0)
+
+            w = compute_wape(y_vl, y_pred)
             wapes.append(w)
-            logger.info(f"  Fold {fold} WAPE: {w:.2f}%")
 
-        return np.mean(wapes)
+            print(f"  {fold:<6} "
+                  f"{str(tr_s)[:10]:<14} {str(tr_e)[:10]:<14} "
+                  f"{str(vl_s)[:10]:<14} {str(vl_e)[:10]:<14} "
+                  f"{w:>7.2f}%")
+
+        print("  " + "-" * 74)
+        mean_wape = float(np.mean(wapes))
+        print(f"  {'Mean CV WAPE':<54} {mean_wape:>7.2f}%\n")
+        return mean_wape, wapes
 
     def train(self):
-        X, y, features = self.prepare_xy()
+        df, features = self.prepare_xy()
 
-        # ── Baseline WAPE (Seasonal Naive, season=7) ──────────────────────────
-        b_wape = baseline_wape(y, season_length=7)
-        logger.info(f"Baseline WAPE (Seasonal Naive): {b_wape:.2f}%")
+        # Baseline WAPE on full sorted target
+        b_wape = baseline_wape(df[TARGET].values, season_length=7)
+        logger.info(f"Baseline WAPE (Seasonal Naive, lag-7): {b_wape:.2f}%")
 
-        models = {
-            "xgboost": XGBRegressor(
-                n_estimators=300,
-                learning_rate=0.05,
-                max_depth=6,
-                random_state=42,
-                verbosity=0
+        model_configs = {
+            "xgboost": (
+                XGBRegressor,
+                dict(n_estimators=300, learning_rate=0.05, max_depth=6,
+                     random_state=42, verbosity=0)
             ),
-            "lightgbm": LGBMRegressor(
-                n_estimators=300,
-                learning_rate=0.05,
-                max_depth=6,
-                random_state=42,
-                verbose=-1
+            "lightgbm": (
+                LGBMRegressor,
+                dict(n_estimators=300, learning_rate=0.05, max_depth=6,
+                     random_state=42, verbose=-1)
             )
         }
 
         results = {}
 
-        for name, model in models.items():
-            logger.info(f"Training {name} with TimeSeriesSplit (5 folds)...")
+        for name, (model_cls, model_kwargs) in model_configs.items():
+            print("\n" + "=" * 78)
+            print(f"  ROLLING-ORIGIN BACKTESTING — {name.upper()}  (5 Folds, Date-Based)")
+            print("=" * 78)
 
-            cv_wape = self.cross_validate(model, X, y, n_splits=5)
+            cv_wape, fold_results = self.rolling_origin_cv(model_cls, model_kwargs, n_splits=5)
 
-            # Final fit on full data for saving
-            model.fit(X, y)
-            y_pred     = np.maximum(model.predict(X), 0)
-            evaluator  = ModelEvaluator(y, y_pred)
+            # Final fit on full data
+            final_model = model_cls(**model_kwargs)
+            final_model.fit(df[features].values, df[TARGET].values)
+            y_pred     = np.maximum(final_model.predict(df[features].values), 0)
+            evaluator  = ModelEvaluator(df[TARGET].values, y_pred)
             metrics    = evaluator.summary()
             model_wape = metrics["WAPE (%)"]
 
-            metrics["CV_WAPE (%)"]       = round(cv_wape, 2)
+            metrics["CV_WAPE (%)"] = round(cv_wape, 2)
             metrics["Baseline_WAPE (%)"] = round(b_wape, 2)
-            metrics["WAPE_Improvement"]  = round(b_wape - model_wape, 2)
+            metrics["WAPE_Improvement"] = round(b_wape - cv_wape, 2)
+            metrics["Rolling_Origin_Folds"] = fold_results
+            metrics["Fold_WAPEs"] = fold_results
             results[name] = metrics
 
+
+            # Calculate residuals from full-data fitted model
+            residuals = df[TARGET].values - y_pred
+
+            # Residual standard deviation
+            residual_std = float(np.std(residuals, ddof=1))
+            z_80 = 1.2816
+
+            # Margin of uncertainty
+            uncertainty_margin = z_80 * residual_std
+            metrics["Uncertainty_Level"] = "80%"
+            metrics["Residual_STD"] = round(residual_std, 4)
+            metrics["Prediction_Interval_Margin"] = round(uncertainty_margin, 4)
+            logger.info(f"80% Forecast Uncertainty Interval calculated | " f"Margin = ±{uncertainty_margin:.4f}")
+
             model_path = os.path.join(MODEL_DIR, f"{name}_model.pkl")
-            joblib.dump(model, model_path)
+            joblib.dump(final_model, model_path)
             logger.info(f"{name} saved → {model_path}")
 
-            # ── WAPE Comparison ───────────────────────────────────────────────
-            print("\n" + "=" * 50)
-            print(f"  {name.upper()}  —  WAPE Comparison")
-            print("=" * 50)
+            improvement = b_wape - cv_wape
+            tag = "BETTER [+]" if improvement > 0 else "WORSE [-]"
             print(f"  Baseline WAPE (Seasonal Naive) : {b_wape:.2f}%")
-            print(f"  Model WAPE                     : {model_wape:.2f}%")
-            print(f"  CV WAPE (TimeSeriesSplit)       : {cv_wape:.2f}%")
-            improvement = b_wape - model_wape
-            tag = "BETTER" if improvement > 0 else "WORSE"
-            print(f"  Improvement                    : {improvement:.2f}%  [{tag}]")
-            print("=" * 50)
+            print(f"  Model WAPE    (full-data fit)  : {model_wape:.2f}%")
+            print(f"  CV WAPE       (rolling-origin) : {cv_wape:.2f}%")
+            print(f"  Improvement vs Baseline (CV)  : {improvement:+.2f}%  [{tag}]")
+            print("=" * 78)
 
-        # ── Select best model by lowest CV WAPE ───────────────────────────────
+        # Best model by lowest CV WAPE
         best = min(results, key=lambda m: results[m]["CV_WAPE (%)"])
-        logger.info(f"Best model: {best} (CV WAPE={results[best]['CV_WAPE (%)']:.2f}%)")
+        logger.info(f"Best model: {best.upper()} (CV WAPE = {results[best]['CV_WAPE (%)']:.2f}%)")
 
         best_model = joblib.load(os.path.join(MODEL_DIR, f"{best}_model.pkl"))
         joblib.dump(best_model, os.path.join(MODEL_DIR, "best_model.pkl"))
-        logger.info("Best model saved as best_model.pkl")
+        logger.info("best_model.pkl saved.")
 
         results["best_model"] = best
         metrics_path = os.path.join(MODEL_DIR, "model_metrics.json")
@@ -168,18 +245,50 @@ class ModelTrainer:
         return results
 
 
+def print_final_proof(results):
+    """Final comparison table: Seasonal Naive vs all models."""
+    best        = results["best_model"]
+    b_wape      = results[best]["Baseline_WAPE (%)"]
+    model_names = [k for k in results if k != "best_model"]
+
+    print("\n")
+    print("=" * 78)
+    print("  FINAL PROOF — Seasonal Naive Baseline vs ML Models (Rolling-Origin CV)")
+    print("=" * 78)
+    print(f"  {'Model':<20} {'WAPE (%)':>10} {'CV WAPE (%)':>13} {'vs Baseline':>13}  {'Fold WAPEs'}")
+    print("-" * 78)
+    print(f"  {'Seasonal Naive':<20} {b_wape:>9.2f}%  {'—':>12}  {'—':>12}")
+    print("-" * 78)
+
+    for name in model_names:
+        m           = results[name]
+        model_wape  = m["WAPE (%)"]
+        cv_wape     = m["CV_WAPE (%)"]
+        improvement = b_wape - cv_wape
+        tag         = "BETTER [+]" if improvement > 0 else "WORSE [-]"
+        marker      = " << BEST" if name == best else ""
+        fold_str    = ", ".join(f"{w:.2f}%" for w in m.get("Fold_WAPEs", []))
+        print(f"  {name.upper():<20} {model_wape:>9.2f}%  {cv_wape:>12.2f}%  {improvement:>+12.2f}%  {tag}{marker}")
+        print(f"  {'':20}  Fold WAPEs: {fold_str}")
+
+    print("=" * 78)
+    print(f"  Best Model Selected : {best.upper()}  (lowest CV WAPE)")
+    print(f"  Baseline WAPE       : {b_wape:.2f}%")
+    print(f"  Best Model CV WAPE  : {results[best]['CV_WAPE (%)']:.2f}%")
+    print(f"  Improvement         : " f"{results[best]['WAPE_Improvement']:+.2f}%")
+    print("=" * 78)
+
+
 if __name__ == "__main__":
     loader   = DataLoader()
     datasets = loader.load_all()
-
     preprocessor = DataPreprocessor(datasets)
     processed    = preprocessor.process()
-
     engineer = FeatureEngineering(processed)
     final_df = engineer.build_features()
-
     trainer = ModelTrainer(final_df)
     results = trainer.train()
 
-    print("\n\nTraining Complete.")
+    print_final_proof(results)
+    print("\nTraining Complete.")
     print(f"Best Model : {results['best_model'].upper()}")

@@ -4,590 +4,449 @@ import numpy as np
 import plotly.express as px
 import os
 
-def load_css():
-    with open("style.css") as f:
-        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
-load_css()
+# PROJECT PATHS
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+DATA_DIR = os.path.join(BASE_DIR, "data")
+PROCESSED_DATA_PATH = os.path.join(DATA_DIR, "processed", "processed_data.csv")
+RISK_DATA_PATH = os.path.join(DATA_DIR, "risk_analysis", "sku_risk_analysis.csv")
+DECISION_GRID_PATH = os.path.join(DATA_DIR, "decisioning_grid", "decisioning_grid.csv")
+STYLE_PATH = os.path.join(BASE_DIR, "style.css")
 
-# Page Configuration
+
+# PAGE CONFIGURATION
 st.set_page_config(page_title="Project FORESIGHT Dashboard", page_icon=" ", layout="wide")
 
 
-# Sidebar
-st.sidebar.title("Project FORESIGHT")
-st.sidebar.markdown("---")
-st.sidebar.success("Demand Forecasting Dashboard")
-st.sidebar.markdown("---")
+# CUSTOM CSS
+def load_css():
+    if os.path.exists(STYLE_PATH):
+        with open(STYLE_PATH, "r", encoding="utf-8") as f:
+            st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+load_css()
 
-# Dark Mode Toggle
+
+# SIDEBAR
+st.sidebar.title("PROJECT FORESIGHT")
+st.sidebar.markdown("---")
+st.sidebar.success("Demand Forecasting & Inventory Intelligence")
+st.sidebar.markdown("---")
 dark_mode = st.sidebar.toggle("Dark Mode", value=False)
 st.sidebar.markdown("---")
 st.sidebar.header("Filters")
 
 
-# Load Dataset
-DATA_PATH = r"E:\Zidio Development\Project_FORESIGHT\data\processed/processed_data.csv"
-if os.path.exists(DATA_PATH):
-    df = pd.read_csv(DATA_PATH)
+# LOAD PROCESSED DATA
+if os.path.exists(PROCESSED_DATA_PATH):
+    processed_df = pd.read_csv(PROCESSED_DATA_PATH)
+
 else:
-    st.warning("Processed Dataset not found.")
-
-    df = pd.DataFrame({
-        "sku_id":["SKU001", "SKU002", "SKU003","SKU004", "SKU005"],
-        "category":["Electronics", "Electronics", "Furniture", "Furniture", "Grocery"],
-        "forecast_units":[120, 80, 160, 90, 230],
-        "selling_price":[450, 900, 150, 200, 45],
-        "unit_cost":[300, 650, 120, 150, 30],
-        "on_hand_units":[50, 140, 250, 80,60],
-        "risk_level":["High", "Overstock", "Medium", "High", "Overstock"]})
+    st.error("processed_data.csv not found.")
+    st.stop()
 
 
-# SKU Search
+# LOAD RISK ANALYSIS
+if os.path.exists(RISK_DATA_PATH):
+    risk_df = pd.read_csv(RISK_DATA_PATH)
+
+else:
+    st.error("sku_risk_analysis.csv not found.")
+    st.stop()
+
+
+# LOAD DECISIONING GRID
+if os.path.exists(DECISION_GRID_PATH):
+    decision_df = pd.read_csv(DECISION_GRID_PATH)
+
+else:
+    st.warning(
+        "decisioning_grid.csv not found. "
+        "Decisioning Grid will be generated automatically."
+    )
+    decision_df = risk_df.copy()
+
+
+# PREPARE PROCESSED DATA
+processed_df["date"] = pd.to_datetime(processed_df["date"], errors="coerce")
+processed_df = processed_df.sort_values("date")
+
+
+# GET LATEST SKU INFORMATION
+latest_sku_df = (processed_df.sort_values("date").groupby("sku_id", as_index=False).tail(1))
+
+
+# ADD CATEGORY INFORMATION
+if "category" in latest_sku_df.columns:
+    category_df = latest_sku_df[["sku_id", "category"]].drop_duplicates(subset=["sku_id"])
+    if "category" not in risk_df.columns:
+        risk_df = risk_df.merge(category_df, on="sku_id", how="left")
+
+    if "category" not in decision_df.columns:
+        decision_df = decision_df.merge(category_df, on="sku_id", how="left")
+
+
+# FORECAST UNITS
+if "forecast_units" not in risk_df.columns:
+    if "Average_Daily_Demand" in risk_df.columns:
+        risk_df["forecast_units"] = (risk_df["Average_Daily_Demand"] * 7)
+
+    elif "Average_Daily_Demand" in decision_df.columns:
+        risk_df["forecast_units"] = (risk_df["Average_Daily_Demand"] * 7)
+
+    else:
+        risk_df["forecast_units"] = 0
+
+
+# SIDEBAR SKU SEARCH
 st.sidebar.subheader("SKU Search")
-sku = st.sidebar.text_input("Enter SKU ID", placeholder="Example: SKU001")
-filtered_df = df.copy()
+sku_search = st.sidebar.text_input("Enter SKU ID", placeholder="Example: 204")
 
 
-# Category Filter
+# CATEGORY FILTER
 st.sidebar.subheader("Category Filter")
-
-# Get available categories safely
-if "category" in df.columns:
-    categories = sorted(df["category"].dropna().astype(str).unique().tolist())
-    category = st.sidebar.selectbox("Select Category", ["All"] + categories)
+if "category" in risk_df.columns:
+    categories = sorted(risk_df["category"].dropna().astype(str).unique().tolist())
+    selected_category = st.sidebar.selectbox("Select Category", ["All"] + categories)
 
 else:
-    st.sidebar.error("Category column not found in dataset.")
-    category = "All"
+    selected_category = "All"
 
 
-# Apply Category Filter
-filtered_df = df.copy()
-if category != "All":
-    filtered_df = filtered_df[filtered_df["category"].astype(str) == category]
+# APPLY FILTERS
+filtered_risk_df = risk_df.copy()
+filtered_decision_df = decision_df.copy()
+# Category Filter
+if selected_category != "All":
+    if "category" in filtered_risk_df.columns:
+        filtered_risk_df = filtered_risk_df[filtered_risk_df["category"].astype(str) == selected_category]
 
+    if "category" in filtered_decision_df.columns:
+        filtered_decision_df = filtered_decision_df[filtered_decision_df["category"].astype(str) == selected_category]
 
-# Filter Result
-st.sidebar.markdown("---")
-st.sidebar.write(f"Products Found: {len(filtered_df)}")
 
 # SKU Search
-if sku.strip():
-    filtered_df = filtered_df[filtered_df["sku_id"].astype(str).str.contains(sku.strip(), case=False, na=False)]
-
-# No Result Handling
-if filtered_df.empty:
-    st.warning(f"No SKU found matching: {sku}")
-filtered_df = df.copy()
-
-if category != "All":
-    filtered_df = filtered_df[filtered_df["category"] == category]
-
-if sku != "":
-    filtered_df = filtered_df[filtered_df["sku_id"].str.contains(sku, case=False)]
+if sku_search.strip():
+    search_text = sku_search.strip()
+    filtered_risk_df = filtered_risk_df[filtered_risk_df["sku_id"].astype(str).str.contains(search_text, case=False, na=False)]
+    filtered_decision_df = filtered_decision_df[filtered_decision_df["sku_id"].astype(str).str.contains(search_text, case=False, na=False)]
 
 
-# KPI Calculation
-revenue_at_risk = (
-    filtered_df.loc[filtered_df["risk_level"]=="High", "forecast_units"] *
-    filtered_df.loc[filtered_df["risk_level"]=="High", "selling_price"]
-).sum()
-
-capital_locked = (
-    filtered_df.loc[filtered_df["risk_level"]=="Overstock", "on_hand_units"] *
-    filtered_df.loc[filtered_df["risk_level"]=="Overstock", "unit_cost"]
-).sum()
-
-total_stockout = (filtered_df["risk_level"]=="High").sum()
-total_overstock = (filtered_df["risk_level"]=="Overstock").sum()
-total_products = len(filtered_df)
-forecast_units = filtered_df["forecast_units"].sum()
+# EMPTY DATA CHECK
+if filtered_risk_df.empty:
+    st.warning("No SKU found for the selected filters.")
+    st.stop()
 
 
-# Dashboard Header
-st.title("Business Dashboard")
-st.caption("Demand Forecasting & Inventory Intelligence")
+# KPI CALCULATIONS
+total_skus = len(filtered_risk_df)
+total_sales_at_risk = (pd.to_numeric(filtered_risk_df["Sales_at_Risk"], errors="coerce").fillna(0).sum())
+total_capital_locked = (pd.to_numeric( filtered_risk_df["Capital_Locked"], errors="coerce").fillna(0).sum())
+high_risk_count = (filtered_risk_df["Risk_Level"].astype(str).str.upper().eq("HIGH").sum())
+medium_risk_count = (filtered_risk_df["Risk_Level"].astype(str).str.upper().eq("MEDIUM").sum())
+low_risk_count = (filtered_risk_df["Risk_Level"].astype(str).str.upper().eq("LOW").sum())
+
+
+# DASHBOARD HEADER
+st.title("PROJECT FORESIGHT")
+st.caption("Demand Forecasting & Inventory Intelligence Dashboard")
 st.markdown("---")
 
 
-# KPI Cards
-c1,c2,c3,c4,c5,c6 = st.columns(6)
+# KPI CARDS
+c1, c2, c3, c4, c5 = st.columns(5)
 with c1:
-    st.metric("Products", total_products)
+    st.metric("SKUs Analysed", f"{total_skus:,}")
 
 with c2:
-    st.metric("Forecast Units", int(forecast_units))
+    st.metric("Sales at Risk", f"{total_sales_at_risk:,.0f}")
 
 with c3:
-    st.metric("Revenue at Risk", f"₹ {revenue_at_risk:,.0f}")
+    st.metric("Capital Locked", f"{total_capital_locked:,.0f}")
 
 with c4:
-    st.metric("Capital Locked", f"₹ {capital_locked:,.0f}")
+    st.metric("HIGH Risk", f"{high_risk_count:,}")
 
 with c5:
-    st.metric("Stockout", int(total_stockout))
-
-with c6:
-    st.metric("Overstock", int(total_overstock))
-
+    st.metric("MEDIUM Risk", f"{medium_risk_count:,}")
 st.markdown("---")
 
 
-# Forecast Trend
-st.header("Demand Forecast")
+# 1. BUSINESS INSIGHTS
+st.header("Business Insights")
+col1, col2 = st.columns(2)
+with col1:
+    st.metric("Total Sales at Risk", f"{total_sales_at_risk:,.2f}")
 
-forecast_df = (filtered_df.groupby("sku_id", as_index=False)["forecast_units"].sum())
-forecast_fig = px.bar(forecast_df, x="sku_id", y="forecast_units", title="Forecast Units by SKU", text_auto=True)
-forecast_fig.update_layout(xaxis_title="SKU", yaxis_title="Forecast Units", height=450)
-st.plotly_chart( forecast_fig, use_container_width=True)
-st.markdown("---")
-
-
-# Revenue Graph
-st.header("Revenue Analysis")
-
-filtered_df["forecast_revenue"] = (filtered_df["forecast_units"] * filtered_df["selling_price"])
-revenue_df = (filtered_df.groupby("category", as_index=False)["forecast_revenue"].sum())
-revenue_fig = px.bar(revenue_df, x="category", y="forecast_revenue", title="Forecast Revenue by Category", text_auto=True)
-revenue_fig.update_layout(height=450)
-st.plotly_chart(revenue_fig, use_container_width=True)
-st.markdown("---")
+with col2:
+    st.metric("Total Capital Locked", f"{total_capital_locked:,.2f}")
 
 
-# Inventory Graph
-st.header("Inventory Status")
-
-inventory_df = (filtered_df.groupby("category", as_index=False)["on_hand_units"].sum())
-inventory_fig = px.pie(inventory_df, names="category", values="on_hand_units", title="Inventory Distribution")
-st.plotly_chart(inventory_fig, use_container_width=True)
-st.markdown("---")
-
-
-# Risk Distribution
-st.header("Inventory Risk")
-
-risk_df = (filtered_df["risk_level"].value_counts().reset_index())
-risk_df.columns = ["Risk", "Count"]
-risk_fig = px.bar(risk_df, x="Risk", y="Count", color="Risk", text_auto=True, title="Risk Distribution")
-risk_fig.update_layout(height=450)
+# RISK DISTRIBUTION
+st.subheader("Risk Level Distribution")
+risk_distribution = (filtered_risk_df["Risk_Level"].value_counts().reset_index())
+risk_distribution.columns = ["Risk Level", "SKU Count"]
+risk_fig = px.bar(risk_distribution, x="Risk Level", y="SKU Count", text_auto=True, title="SKU Risk Distribution")
+risk_fig.update_layout(height=400)
 st.plotly_chart(risk_fig, use_container_width=True)
 st.markdown("---")
 
 
-# ==========================================================
-# Stockout Risk Graph
-# ==========================================================
+# 2. RISKY SKUs
+st.header("Top 10 Risky SKUs")
+top_risky = (filtered_risk_df.sort_values("Sales_at_Risk", ascending=False).head(10))
 
+
+top_columns = [
+    "sku_id",
+    "Days_of_Supply",
+    "Stockout_Risk_Score",
+    "Overstock_Risk_Score",
+    "Risk_Level",
+    "Primary_Risk",
+    "Sales_at_Risk",
+    "Capital_Locked",
+    "Recommended_Action"
+]
+
+top_columns = [col for col in top_columns if col in top_risky.columns]
+st.dataframe(top_risky[top_columns], use_container_width=True, hide_index=True)
 st.markdown("---")
-st.header("Stockout Risk Analysis")
 
-# Check required columns
-required_columns = ["sku_id", "forecast_units", "on_hand_units"]
 
-if all(column in filtered_df.columns for column in required_columns):
+# 3. FOUR-QUADRANT DECISIONING GRID
+st.header("Decisioning Grid")
+st.info("Each SKU is positioned according to Stockout Risk" "and Overstock Risk. Bubble size represents Sales at Risk.")
 
-    # Create Stockout Risk DataFrame
-    stockout_df = filtered_df[["sku_id", "forecast_units", "on_hand_units"]].copy()
 
-    # Calculate shortage
-    stockout_df["shortage_units"] = (stockout_df["forecast_units"] - stockout_df["on_hand_units"])
+# CHECK REQUIRED COLUMNS
+required_grid_columns = ["sku_id", "Stockout_Risk_Score", "Overstock_Risk_Score"]
+missing_columns = [col for col in required_grid_columns if col not in filtered_decision_df.columns]
 
-    # Only stockout / shortage products
-    stockout_df["stockout_units"] = (stockout_df["shortage_units"].clip(lower=0))
 
-    # Stockout Risk Percentage
-    stockout_df["stockout_risk_pct"] = np.where(
-        stockout_df["forecast_units"] > 0,
-        (stockout_df["stockout_units"] / stockout_df["forecast_units"]) * 100, 0
+if missing_columns:
+    st.error(
+        "Decisioning Grid cannot be displayed."
+        f"Missing columns: {missing_columns}"
     )
-
-    # Risk Level
-    stockout_df["risk_level"] = np.select(
-        [
-            stockout_df["stockout_risk_pct"] >= 50,
-            stockout_df["stockout_risk_pct"] >= 20,
-            stockout_df["stockout_risk_pct"] > 0
-        ],
-        ["High", "Medium", "Low"], default="No Risk"
-    )
-
-    # Sort highest risk first
-    stockout_df = stockout_df.sort_values("stockout_risk_pct", ascending=False)
-
-    # Stockout Risk Graph
-    stockout_fig = px.bar(
-        stockout_df,
-        x="sku_id",
-        y="stockout_risk_pct",
-        color="risk_level",
-        text="stockout_risk_pct",
-        title="Stockout Risk by SKU"
-    )
-    stockout_fig.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
-
-    stockout_fig.update_layout(
-        xaxis_title="SKU",
-        yaxis_title="Stockout Risk (%)", 
-        yaxis=dict(range=[0, max(100, stockout_df["stockout_risk_pct"].max() + 10)]),  height=500, legend_title="Risk Level"
-    )
-    st.plotly_chart(stockout_fig, use_container_width=True)
-
-
-    # Stockout Risk KPI
-    high_risk = (stockout_df["risk_level"] == "High").sum()
-    medium_risk = (stockout_df["risk_level"] == "Medium").sum()
-    low_risk = (stockout_df["risk_level"] == "Low").sum()
-    no_risk = (stockout_df["risk_level"] == "No Risk").sum()
-    c1, c2, c3, c4 = st.columns(4)
-
-    with c1:
-        st.metric("High Risk", int(high_risk))
-
-    with c2:
-        st.metric("Medium Risk", int(medium_risk))
-
-    with c3:
-        st.metric("Low Risk", int(low_risk))
-
-    with c4:
-        st.metric("No Risk", int(no_risk))
-
-
-    # Stockout Risk Table
-    st.subheader("Stockout Risk Details")
-    display_df = stockout_df[
-        [
-            "sku_id",
-            "forecast_units",
-            "on_hand_units",
-            "stockout_units",
-            "stockout_risk_pct",
-            "risk_level"
-        ]
-    ].copy()
-
-    display_df["stockout_risk_pct"] = (display_df["stockout_risk_pct"].round(2))
-    st.dataframe(display_df, use_container_width=True, hide_index=True)
 
 else:
-    st.warning("Stockout Risk graph cannot be displayed.")
-    st.info(
-        "Dataset must contain: "
-        "sku_id, forecast_units and on_hand_units."
+    grid_df = filtered_decision_df.copy()
+
+
+    # Numeric conversion
+    grid_df["Stockout_Risk_Score"] = pd.to_numeric(grid_df["Stockout_Risk_Score"], errors="coerce").fillna(0)
+    grid_df["Overstock_Risk_Score"] = pd.to_numeric(grid_df["Overstock_Risk_Score"], errors="coerce").fillna(0)
+    if "Sales_at_Risk" in grid_df.columns:
+        grid_df["Sales_at_Risk"] = pd.to_numeric(grid_df["Sales_at_Risk"], errors="coerce").fillna(0)
+
+    else:
+        grid_df["Sales_at_Risk"] = 1
+
+
+    # Decisioning Quadrant
+    def classify_quadrant(row):
+        stockout = row["Stockout_Risk_Score"]
+        overstock = row["Overstock_Risk_Score"]
+
+        if stockout >= 0.75 and overstock < 0.75:
+            return "Reorder Now"
+
+        elif stockout < 0.75 and overstock >= 0.75:
+            return "Markdown / Clear"
+
+        elif stockout >= 0.75 and overstock >= 0.75:
+            return "Watch / Volatile"
+
+        else:
+            return "Healthy"
+
+    grid_df["Decision_Quadrant"] = grid_df.apply(classify_quadrant, axis=1)
+
+
+    # Decision Actions
+    action_map = {
+        "Reorder Now": "Urgently replenish stock",
+        "Markdown / Clear": "Run promotions / reduce excess inventory",
+        "Watch / Volatile": "Investigate demand volatility",
+        "Healthy": "Maintain current inventory"
+    }
+    grid_df["Decision_Action"] = (grid_df["Decision_Quadrant"].map(action_map))
+
+
+    # Quadrant Distribution
+    quadrant_order = ["Reorder Now", "Markdown / Clear", "Watch / Volatile", "Healthy"]
+    quadrant_counts = (grid_df["Decision_Quadrant"].value_counts().reindex(quadrant_order, fill_value=0))
+
+
+    # Four KPI Cards
+    q1, q2, q3, q4 = st.columns(4)
+    with q1:
+        st.metric("Reorder Now", int(quadrant_counts["Reorder Now"]))
+
+    with q2:
+        st.metric("Markdown / Clear", int(quadrant_counts["Markdown / Clear"]))
+
+    with q3:
+        st.metric("Watch / Volatile", int(quadrant_counts["Watch / Volatile"]))
+
+    with q4:
+        st.metric("Healthy", int(quadrant_counts["Healthy"]))
+    st.markdown("###Stockout vs Overstock Risk")
+
+
+    # Plotly Decisioning Grid
+    grid_fig = px.scatter(grid_df,
+        x="Stockout_Risk_Score",
+        y="Overstock_Risk_Score",
+        size="Sales_at_Risk",
+        color="Decision_Quadrant",
+        hover_name="sku_id",
+        hover_data={"Stockout_Risk_Score": ":.2f", "Overstock_Risk_Score": ":.2f", "Sales_at_Risk": ":,.2f", "Decision_Action": True},
+        category_orders={"Decision_Quadrant": quadrant_order},
+        title=("SKU Decisioning Grid — " "Stockout vs Overstock Risk")
     )
 
+
+    # Quadrant Boundary Lines
+    grid_fig.add_vline(x=0.75, line_dash="dash")
+    grid_fig.add_hline(y=0.75, line_dash="dash")
+
+
+    # Quadrant Labels
+    grid_fig.add_annotation(x=0.375, y=0.875, text="MARKDOWN / CLEAR", showarrow=False)
+    grid_fig.add_annotation(x=0.375, y=0.375, text="HEALTHY", showarrow=False)
+    grid_fig.add_annotation(x=0.875, y=0.875, text="WATCH / VOLATILE", showarrow=False)
+    grid_fig.add_annotation(x=0.875, y=0.375, text="REORDER NOW", showarrow=False)
+
+    grid_fig.update_layout(
+        xaxis_title="Stockout Risk Score",
+        yaxis_title="Overstock Risk Score",
+        xaxis=dict(range=[0, 1.05]),
+        yaxis=dict( range=[0, 1.05]),
+        height=650, legend_title="Decision Quadrant"
+    )
+
+    st.plotly_chart(grid_fig, use_container_width=True)
+
+
+    # Decisioning Grid Explanation
+    st.subheader("Decisioning Rules")
+    rule_df = pd.DataFrame({
+        "Quadrant": ["Reorder Now", "Markdown / Clear", "Watch / Volatile", "Healthy"],
+        "Condition": [ "High Stockout + Low Overstock", "Low Stockout + High Overstock", "High Stockout + High Overstock", "Low Stockout + Low Overstock"],
+        "Recommended Action": ["Urgently replenish stock", "Run promotions / reduce inventory", "Investigate demand volatility", "Maintain current inventory"]
+    })
+
+
+    st.dataframe(rule_df,use_container_width=True,hide_index=True)
+
+
+    # Decisioning Grid Table
+    st.subheader("SKU Decisioning Details")
+
+    display_columns = ["sku_id", "Stockout_Risk_Score", "Overstock_Risk_Score", "Decision_Quadrant", "Decision_Action", "Sales_at_Risk", "Capital_Locked"]
+    display_columns = [col for col in display_columns if col in grid_df.columns]
+    display_grid = grid_df[display_columns].copy()
+
+
+    if "Stockout_Risk_Score" in display_grid.columns:
+        display_grid["Stockout_Risk_Score"] = display_grid["Stockout_Risk_Score"].round(2)
+
+
+    if "Overstock_Risk_Score" in display_grid.columns:
+        display_grid["Overstock_Risk_Score"] = display_grid["Overstock_Risk_Score"].round(2)
+
+
+    if "Sales_at_Risk" in display_grid.columns:
+        display_grid["Sales_at_Risk"] = display_grid["Sales_at_Risk"].round(2)
+
+
+    if "Capital_Locked" in display_grid.columns:
+        display_grid["Capital_Locked"] = display_grid["Capital_Locked"].round(2)
+    st.dataframe(display_grid, use_container_width=True, hide_index=True)
 st.markdown("---")
 
 
-# Overstock Risk Graph
+# 4. INVENTORY RISK
+st.header("Inventory Risk Analysis")
+risk_chart_df = (filtered_risk_df[["sku_id", "Stockout_Risk_Score", "Overstock_Risk_Score"]].melt(id_vars="sku_id", var_name="Risk Type", value_name="Risk Score"))
+risk_chart_df["Risk Type"] = (risk_chart_df["Risk Type"].replace({"Stockout_Risk_Score": "Stockout Risk", "Overstock_Risk_Score": "Overstock Risk"}))
+risk_fig = px.bar(risk_chart_df, x="sku_id", y="Risk Score", color="Risk Type", barmode="group", title="Stockout vs Overstock Risk by SKU")
+risk_fig.update_layout(xaxis_title="SKU", yaxis_title="Risk Score", height=500)
+st.plotly_chart(risk_fig, use_container_width=True)
 st.markdown("---")
-st.header("Overstock Risk Analysis")
 
 
-# Required columns check
-required_columns = ["sku_id", "forecast_units", "on_hand_units"]
-if all(column in filtered_df.columns for column in required_columns):
 
-    # Create Overstock Risk DataFrame
-    overstock_df = filtered_df[["sku_id", "forecast_units", "on_hand_units"]].copy()
+# 5. RISK DETAILS
+st.header("SKU Risk Details")
+risk_columns = ["sku_id", "Days_of_Supply", "Stockout_Risk_Score", "Overstock_Risk_Score", "Risk_Level", "Primary_Risk", "Recommended_Action", "Sales_at_Risk", "Capital_Locked"]
 
-    # Calculate excess inventory
-    overstock_df["excess_units"] = (overstock_df["on_hand_units"] - overstock_df["forecast_units"])
-
-    # Only excess stock
-    overstock_df["overstock_units"] = (overstock_df["excess_units"].clip(lower=0))
-
-    # Overstock Risk Percentage
-    overstock_df["overstock_risk_pct"] = np.where(
-        overstock_df["forecast_units"] > 0,
-        (overstock_df["overstock_units"] / overstock_df["forecast_units"]) * 100, 0
-    )
-
-    # Risk Level
-    overstock_df["risk_level"] = np.select(
-        [
-            overstock_df["overstock_risk_pct"] >= 100,
-            overstock_df["overstock_risk_pct"] >= 50,
-            overstock_df["overstock_risk_pct"] > 0
-        ],
-        ["High", "Medium", "Low"], default="No Risk"
-    )
-
-    # Sort highest risk first
-    overstock_df = overstock_df.sort_values("overstock_risk_pct", ascending=False)
-
-    # Overstock Risk Graph
-    overstock_fig = px.bar(
-        overstock_df,
-        x="sku_id",
-        y="overstock_risk_pct",
-        color="risk_level",
-        text="overstock_risk_pct",
-        title="Overstock Risk by SKU"
-    )
-
-    overstock_fig.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
-
-    overstock_fig.update_layout(
-        xaxis_title="SKU",
-        yaxis_title="Overstock Risk (%)",
-        yaxis=dict(range=[0, max(100, overstock_df["overstock_risk_pct"].max() + 10)]),
-        height=500,
-        legend_title="Risk Level"
-    )
-    st.plotly_chart(overstock_fig, use_container_width=True)
+risk_columns = [col for col in risk_columns if col in filtered_risk_df.columns]
+risk_display = filtered_risk_df[risk_columns].copy()
+st.dataframe(risk_display, use_container_width=True, hide_index=True)
+st.markdown("---")
 
 
-    # Overstock Risk KPI Cards
-    high_overstock = (overstock_df["risk_level"] == "High").sum()
-    medium_overstock = (overstock_df["risk_level"] == "Medium").sum()
-    low_overstock = (overstock_df["risk_level"] == "Low").sum()
-    no_overstock = (overstock_df["risk_level"] == "No Risk").sum()
-    c1, c2, c3, c4 = st.columns(4)
+# 6. FORECAST INFORMATION
+st.header("Demand Forecast")
+if "forecast_units" in filtered_risk_df.columns:
+    forecast_df = (filtered_risk_df[["sku_id", "forecast_units"]].sort_values("forecast_units", ascending=False).head(20))
+    forecast_fig = px.bar(forecast_df, x="sku_id", y="forecast_units", text_auto=True, title="Forecast Demand by SKU")
+    forecast_fig.update_layout(xaxis_title="SKU", yaxis_title="Forecast Units", height=500)
+    st.plotly_chart(forecast_fig, use_container_width=True)
 
-    with c1:
-        st.metric("High Overstock", int(high_overstock))
-
-    with c2:
-        st.metric("Medium Overstock", int(medium_overstock))
-
-    with c3:
-        st.metric("Low Overstock", int(low_overstock))
-
-    with c4:
-        st.metric("No Overstock", int(no_overstock))
-
-
-    # Overstock Risk Table
-    st.subheader("Overstock Risk Details")
-    overstock_display = overstock_df[
-        [
-            "sku_id",
-            "forecast_units",
-            "on_hand_units",
-            "overstock_units",
-            "overstock_risk_pct",
-            "risk_level"
-        ]
-    ].copy()
-
-    overstock_display["overstock_risk_pct"] = (overstock_display["overstock_risk_pct"].round(2))
-    st.dataframe(overstock_display, use_container_width=True, hide_index=True)
 
 else:
-    st.warning("Overstock Risk graph cannot be displayed.")
-    st.info(
-        "Dataset must contain: "
-        "sku_id, forecast_units and on_hand_units."
-    )
-
+    st.info("Forecast data is not available in the risk dataset.")
 st.markdown("---")
 
 
-# Category Summary
-st.header("Category Summary")
-
-summary = (
-    filtered_df
-    .groupby("category")
-    .agg(
-        Forecast=("forecast_units", "sum"),
-        Inventory=("on_hand_units", "sum"),
-        Revenue=("forecast_revenue", "sum")
-    )
-    .reset_index()
-)
-
-st.dataframe(summary, use_container_width=True)
-st.markdown("---")
-
-
-# Top Forecast Products
-st.header("Top Forecast Products")
-top_products = (filtered_df.sort_values("forecast_units", ascending=False).head(10))
-st.dataframe(top_products, use_container_width=True)
-st.markdown("---")
-
-
-# Forecast vs Actual Comparison
-st.markdown("---")
-st.header("Forecast vs Actual")
-
-# Check required columns
-if ("units_sold" in filtered_df.columns and "forecast_units" in filtered_df.columns):
-    compare_df = filtered_df[["sku_id", "units_sold", "forecast_units"]].copy()
-
-    # Group by SKU
-    compare_df = (
-        compare_df
-        .groupby("sku_id", as_index=False)
-        .agg(Actual=("units_sold", "sum"), Forecast=("forecast_units", "sum"))
-    )
-
-    # Convert to long format for Plotly
-    chart_df = compare_df.melt(
-        id_vars="sku_id",
-        value_vars=["Actual", "Forecast"],
-        var_name="Type",
-        value_name="Units"
-    )
-
-    # Create Graph
-    fig_compare = px.bar(
-        chart_df,
-        x="sku_id",
-        y="Units",
-        color="Type",
-        barmode="group",
-        text_auto=True,
-        title="Forecast vs Actual Demand by SKU"
-    )
-
-    fig_compare.update_layout(
-        xaxis_title="SKU",
-        yaxis_title="Units",
-        height=500,
-        legend_title="Demand Type",
-        hovermode="x unified"
-    )
-
-    st.plotly_chart(fig_compare, use_container_width=True)
-
-    # Comparison Table
-    st.subheader("Forecast vs Actual Summary")
-    compare_df["Difference"] = (compare_df["Forecast"] - compare_df["Actual"])
-    compare_df["Accuracy (%)"] = np.where(compare_df["Actual"] != 0, (1 - abs(compare_df["Forecast"] - compare_df["Actual"]) / compare_df["Actual"]) * 100,0)
-    compare_df["Accuracy (%)"] = (compare_df["Accuracy (%)"].clip(0, 100).round(2))
-    st.dataframe(compare_df, use_container_width=True, hide_index=True)
-
-else:
-    st.warning("Forecast vs Actual graph cannot be displayed.")
-    st.info(
-            "Dataset must contain both "
-            "'units_sold' and 'forecast_units' columns."
-        )
-
-st.markdown("---")
-
-
-# Download Forecast CSV
-st.header("Download Forecast")
-
-csv = filtered_df.to_csv(index=False).encode("utf-8")
-st.download_button(label="Download Forecast CSV", data=csv, file_name="forecast_results.csv", mime="text/csv")
-st.markdown("---")
-
-
-# Download Risk Report
-st.markdown("---")
-st.subheader("Download Risk Report")
-
-# Risk Report Content
-risk_report = f"""
-----------------------------------------------------------
-                PROJECT FORESIGHT
-                  RISK REPORT
-----------------------------------------------------------
-Generated Date:
-{pd.Timestamp.now().strftime("%d-%m-%Y %H:%M:%S")}
-
-----------------------------------------------------------
-                    KPI SUMMARY
-----------------------------------------------------------
-
-Total Products       : {total_products}
-Forecast Units       : {forecast_units:,.0f}
-Revenue at Risk      : {revenue_at_risk:,.2f}
-Capital Locked       : {capital_locked:,.2f}
-Total Stockout       : {total_stockout}
-Total Overstock      : {total_overstock}
-
-----------------------------------------------------------
-                 RISK SUMMARY
-----------------------------------------------------------
-
-High Risk / Stockout Products : {total_stockout}
-Overstock Products            : {total_overstock}
-
-----------------------------------------------------------
-             BUSINESS RECOMMENDATIONS
-----------------------------------------------------------
-
-1. Increase inventory for High Risk / Stockout SKUs.
-2. Reduce excess inventory for Overstock products.
-3. Review demand forecasts before procurement.
-4. Monitor inventory levels regularly.
-5. Maintain appropriate safety stock.
-
-----------------------------------------------------------
-                    PROJECT FORESIGHT
-----------------------------------------------------------
-AI-Powered Demand Forecasting & Inventory Intelligence System
-
-----------------------------------------------------------
-"""
-
-# Download Button
-st.download_button(
-    label="Download Risk Report",
-    data=risk_report,
-    file_name="Risk_Report.txt",
-    mime="text/plain",
-    use_container_width=True
-)
-
-st.markdown("---")
-
-
-
-# Business Report Download
-st.header("Download Business Report")
-
-report = f"""
------------------------------------------
-
-PROJECT FORESIGHT
-BUSINESS REPORT
-
------------------------------------------
-
-Total Products : {total_products}
-Forecast Units : {forecast_units}
-Revenue at Risk : {revenue_at_risk:,.2f}
-Capital Locked : {capital_locked:,.2f}
-Total Stockout : {total_stockout}
-Total Overstock : {total_overstock}
-
------------------------------------------
-
-Business Recommendation
-    1. Increase inventory for High Risk SKUs.
-    2. Reduce inventory for Overstock products.
-    3. Review weekly forecast before procurement.
-    4. Monitor inventory every week.
-
------------------------------------------
-"""
-
-st.download_button(label="Download Business Report", data=report, file_name="Business_Report.txt", mime="text/plain")
-st.markdown("---")
-
-
-# Dashboard Summary
-st.header("Dashboard Summary")
-
-st.success(f"""
-    Total Products : {total_products}
-    Forecast Units : {forecast_units}
-    Revenue at Risk :  {revenue_at_risk:,.2f}
-    Capital Locked : {capital_locked:,.2f}
-    High Risk Products : {total_stockout}
-    Overstock Products : {total_overstock}
+# 7. BUSINESS RECOMMENDATIONS
+st.header("Business Recommendations")
+st.markdown("""
+    - Prioritize **Reorder Now** SKUs.
+    - Monitor **₹ Sales at Risk** for stockout decisions.
+    - Monitor **₹ Capital Locked** for excess inventory.
+    - Use **Markdown / Clear** for overstocked SKUs.
+    - Investigate **Watch / Volatile** SKUs before taking action.
+    - Maintain inventory for **Healthy** SKUs.
+    - Use the demand forecast for procurement planning.
+    - Review forecast uncertainty before major inventory decisions.
+    - Retrain the forecasting model periodically with updated sales data.
 """)
+st.markdown("---")
+
+
+# 8. DOWNLOAD DECISIONING GRID
+st.header("Download Reports")
+decision_csv = grid_df.to_csv(index=False).encode("utf-8")
+st.download_button(label="Download Decisioning Grid CSV", data=decision_csv, file_name="decisioning_grid_dashboard.csv", mime="text/csv", use_container_width=True)
+risk_csv = filtered_risk_df.to_csv(index=False).encode("utf-8")
+st.download_button(label="Download Risk Analysis CSV", data=risk_csv, file_name="sku_risk_analysis_dashboard.csv", mime="text/csv", use_container_width=True)
+
 
 st.markdown("---")
 
 
-# Footer
-st.caption("Project FORESIGHT | AI-Powered Demand Forecasting & Inventory Intelligence")
+# DASHBOARD SUMMARY
+st.header("Dashboard Summary")
+st.success(
+    f"""
+    Total SKUs Analysed : {total_skus}
+    Total Sales at Risk : {total_sales_at_risk:,.2f}
+    Total Capital Locked : {total_capital_locked:,.2f}
+    HIGH Risk SKUs : {high_risk_count}
+    MEDIUM Risk SKUs : {medium_risk_count}
+    LOW Risk SKUs : {low_risk_count}
+    Reorder Now : {int(quadrant_counts["Reorder Now"])}
+    Markdown / Clear : {int(quadrant_counts["Markdown / Clear"])}
+    Watch / Volatile : {int(quadrant_counts["Watch / Volatile"])}
+    Healthy : {int(quadrant_counts["Healthy"])}
+    """
+)
+
+
+# FOOTER
+st.markdown("---")
+st.caption("Project FORESIGHT" "AI-Powered Demand Forecasting & Inventory Intelligence")

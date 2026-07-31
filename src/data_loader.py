@@ -12,8 +12,13 @@ logger = logging.getLogger(__name__)
 
 
 # Data Loader Class
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
 class DataLoader:
-    def __init__(self, data_path="data/raw"):
+    def __init__(self, data_path=None):
+        if data_path is None:
+            data_path = os.path.join(BASE_DIR, "data", "raw")
         self.data_path = data_path
         self.files = {
             "sales": "sales_daily.csv",

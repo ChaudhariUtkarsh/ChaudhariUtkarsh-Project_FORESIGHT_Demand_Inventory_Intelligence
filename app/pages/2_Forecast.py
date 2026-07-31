@@ -3,13 +3,7 @@ import pandas as pd
 import numpy as np
 import joblib
 import os
-
-def load_css():
-    with open("style.css") as f:
-        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-
-load_css()
-
+import plotly.graph_objects as go
 
 # Page Configuration
 st.set_page_config(page_title="Demand Forecast", page_icon=" ", layout="wide")
@@ -140,7 +134,8 @@ if submitted:
             st.metric("Forecast Units", prediction)
 
         with c2:
-            expected_revenue = prediction * 100 st.metric("Expected Revenue", f"{expected_revenue:,.2f}")
+            expected_revenue = prediction * 100
+            st.metric("Expected Revenue", f"{expected_revenue:,.2f}")
 
         with c3:
             if prediction > reorder_point:
@@ -161,18 +156,15 @@ if submitted:
 
         # Forecast Chart
         chart = pd.DataFrame({"Day":list(range(1,forecast_days+1)), "Forecast":[prediction]*forecast_days})
-        fig = px.line(chart, x="Day", y="Forecast", markers=True, title="Forecast Trend")
+        fig = go.Figure(go.Scatter(x=chart["Day"], y=chart["Forecast"], mode="lines+markers", name="Forecast"))
+        fig.update_layout(title="Forecast Trend", xaxis_title="Day", yaxis_title="Units")
         st.plotly_chart(fig, use_container_width=True)
 
 
         # Forecast Bar Chart
-        fig2 = px.bar(summary, x="SKU", y="Forecast Units", color="Risk", text_auto=True, title="Forecast by SKU")
+        fig2 = go.Figure(go.Bar(x=summary["SKU"], y=summary["Forecast Units"], text=summary["Forecast Units"], textposition="auto"))
+        fig2.update_layout(title="Forecast by SKU")
         st.plotly_chart(fig2, use_container_width=True)
-
-        
-        # Forecast Gauge
-        gauge = px.bar(x=["Forecast"], y=[prediction], text_auto=True, title="Forecast Indicator")
-        st.plotly_chart(gauge, use_container_width=True)
 
     except Exception as e:
         st.error(e)

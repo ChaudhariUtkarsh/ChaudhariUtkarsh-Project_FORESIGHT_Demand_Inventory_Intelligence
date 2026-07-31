@@ -21,3 +21,7 @@ statsmodels==0.14.4
 
 prophet==1.1.6                 # Utilities
 requests==2.32.3
+
+fastapi==0.115.0               # REST API
+uvicorn==0.30.6
+pydantic==2.7.4
