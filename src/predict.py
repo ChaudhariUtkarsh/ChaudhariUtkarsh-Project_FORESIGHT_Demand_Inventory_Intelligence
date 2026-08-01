@@ -78,22 +78,60 @@ class DemandPredictor:
         self.uncertainty_margin = (uncertainty_margin)
 
     # SKU PREDICTION
-    def predict(self, sku_id):
+    def predict(self, data):
         try:
-            sku_id = str(sku_id).strip()
+            sku_id = str(data["sku_id"]).strip()
 
             if self.label_encoder is None:
                 raise ValueError("label_encoder.pkl not found.")
 
             if sku_id not in self.label_encoder.classes_:
-                raise ValueError(f"SKU {sku_id} not found in trained model.")
+                raise ValueError(
+                    f"SKU {sku_id} not found in trained model. "
+                    f"Valid SKU range: {self.label_encoder.classes_[0]} "
+                    f"to {self.label_encoder.classes_[-1]}"
+                )
 
             encoded_sku = self.label_encoder.transform([sku_id])[0]
-            X_input = [[encoded_sku]]
-            prediction = float(self.model.predict(X_input)[0])
+
+            features = [
+                encoded_sku,
+                data["year"],
+                data["month"],
+                data["week"],
+                data["day"],
+                data["day_of_week"],
+                data["quarter"],
+                data["is_weekend"],
+                data["lag_1"],
+                data["lag_7"],
+                data["lag_14"],
+                data["rolling_mean_7"],
+                data["rolling_std_7"],
+                data["rolling_mean_30"],
+                data["price_difference"],
+                data["discount_percentage"],
+                data["inventory_gap"],
+                data["total_inventory"],
+                data["on_hand_units"],
+                data["on_order_units"],
+                data["reorder_point"]
+            ]
+
+
+            if len(features) != self.model.n_features_in_:
+                raise ValueError(
+                    f"Feature mismatch: sending {len(features)} features, "
+                    f"but model expects {self.model.n_features_in_}."
+                )
+
+
+            prediction = float(self.model.predict([features])[0])
             prediction = max(prediction, 0.0)
+
             lower_bound = max(prediction - self.uncertainty_margin, 0.0)
-            upper_bound = prediction + self.uncertainty_margin
+            upper_bound = (prediction + self.uncertainty_margin)
+
             return {
                 "sku_id": sku_id,
                 "predicted_demand": round(prediction, 2),
