@@ -80,19 +80,20 @@ class DemandPredictor:
     # SKU PREDICTION
     def predict(self, sku_id):
         try:
-            sku_id = int(sku_id)
+            sku_id = str(sku_id).strip()
+
             if self.label_encoder is None:
                 raise ValueError("label_encoder.pkl not found.")
 
             if sku_id not in self.label_encoder.classes_:
                 raise ValueError(f"SKU {sku_id} not found in trained model.")
 
-            encoded_sku = (self.label_encoder.transform([sku_id])[0])
+            encoded_sku = self.label_encoder.transform([sku_id])[0]
             X_input = [[encoded_sku]]
             prediction = float(self.model.predict(X_input)[0])
             prediction = max(prediction, 0.0)
             lower_bound = max(prediction - self.uncertainty_margin, 0.0)
-            upper_bound = (prediction + self.uncertainty_margin)
+            upper_bound = prediction + self.uncertainty_margin
             return {
                 "sku_id": sku_id,
                 "predicted_demand": round(prediction, 2),
