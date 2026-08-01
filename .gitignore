@@ -12,12 +12,6 @@ __pycache__/
 # Environment Variables
 .env
 
-# Model Files
-*.pkl
-*.joblib
-*.h5
-*.keras
-
 # Logs
 *.log
 
@@ -28,7 +22,7 @@ __pycache__/
 Thumbs.db
 .DS_Store
 
-# Data (optional - if datasets are large)
+# Data
 data/raw/
 data/processed/
 
