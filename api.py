@@ -85,7 +85,7 @@ def predict(request: PredictRequest):
         raise HTTPException(status_code=503, detail="Model not loaded. Run src/train_model.py first.")
 
     data = request.model_dump()
-    forecast = predictor.predict(data)
+    forecast = predictor.predict(data["sku_id"])
     risk, recommendation = get_risk(forecast, request.reorder_point)
 
     return PredictResponse(sku_id         = request.sku_id, forecast_units = forecast, risk_level     = risk, recommendation = recommendation)
