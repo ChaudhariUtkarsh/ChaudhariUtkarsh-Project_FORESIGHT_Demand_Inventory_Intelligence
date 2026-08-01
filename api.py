@@ -83,10 +83,8 @@ def health():
 def predict(request: PredictRequest):
     if predictor is None:
         raise HTTPException(status_code=503, detail="Model not loaded.")
-
     data = request.model_dump()
     forecast_result = predictor.predict(data)
     predicted_demand = forecast_result["predicted_demand"]
     risk, recommendation = get_risk(predicted_demand, request.reorder_point)
-
     return PredictResponse(sku_id=request.sku_id, forecast_units=predicted_demand, risk_level=risk, recommendation=recommendation)
