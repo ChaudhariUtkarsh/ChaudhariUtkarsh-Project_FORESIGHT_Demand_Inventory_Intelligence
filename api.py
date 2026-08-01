@@ -2,7 +2,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from predict import DemandPredictor
+from src.predict import DemandPredictor
 
 #App
 app = FastAPI(
