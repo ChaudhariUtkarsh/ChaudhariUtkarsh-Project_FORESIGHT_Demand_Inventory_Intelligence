@@ -6,523 +6,346 @@ import os
 
 
 # PAGE CONFIGURATION
-st.set_page_config(page_title="Project FORESIGHT | Dashboard", page_icon=" ", layout="wide", initial_sidebar_state="expanded")
-
-
-# PROJECT PATHS
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-DATA_DIR = os.path.join(BASE_DIR, "data")
-PROCESSED_DIR = os.path.join(DATA_DIR, "processed")
-RISK_DIR = os.path.join(DATA_DIR, "risk_analysis")
-DECISION_DIR = os.path.join(DATA_DIR, "decisioning_grid")
-PROCESSED_DATA_PATH = os.path.join(PROCESSED_DIR, "processed_data.csv")
-WEEKLY_DATA_PATH = os.path.join(PROCESSED_DIR, "weekly_model_data.csv")
-RISK_DATA_PATH = os.path.join(RISK_DIR, "sku_risk_analysis.csv")
-DECISION_GRID_PATH = os.path.join(DECISION_DIR, "decisioning_grid.csv")
-
-
-STYLE_PATH = os.path.join(BASE_DIR, "app", "style.css")
+st.set_page_config(page_title="Dashboard | Project FORESIGHT", page_icon=" ", layout="wide", initial_sidebar_state="expanded")
 
 
 # LOAD CSS
 def load_css():
-    if os.path.exists(STYLE_PATH):
-        with open(STYLE_PATH, "r", encoding="utf-8") as f:
+    css_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "style.css")
+
+    if os.path.exists(css_path):
+        with open(css_path, "r", encoding="utf-8") as f:
             st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-    else:
-        st.warning(f"style.css not found at: {STYLE_PATH}")
+
 load_css()
 
 
-# HELPER FUNCTIONS
-def numeric_column(df, column, default=0):
-    if column in df.columns:
-        return pd.to_numeric(df[column], errors="coerce").fillna(default)
-    return pd.Series(default, index=df.index, dtype=float)
+# TITLE
+st.title("Project FORESIGHT Dashboard")
+st.subheader("Demand Forecasting & Inventory Intelligence")
+st.markdown("---")
 
 
-def first_existing_column(df, columns):
-    for col in columns:
-        if col in df.columns:
-            return col
-    return None
+# DATA PATH
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+DATA_PATH = os.path.join(BASE_DIR, "data", "processed", "processed_data.csv")
 
 
 # LOAD DATA
-processed_df = pd.DataFrame()
-weekly_df = pd.DataFrame()
-risk_df = pd.DataFrame()
-decision_df = pd.DataFrame()
+if not os.path.exists(DATA_PATH):
+    st.error(f"Processed dataset not found:\n{DATA_PATH}")
+    st.stop()
+df = pd.read_csv(DATA_PATH)
+df.columns = (df.columns.str.strip().str.lower().str.replace(" ", "_"))
 
 
-# Processed Data
-if os.path.exists(PROCESSED_DATA_PATH):
-    try:
-        processed_df = pd.read_csv(PROCESSED_DATA_PATH)
-    except Exception as e:
-        st.error(f"Error loading processed_data.csv: {e}")
+# DATA TYPE CLEANING
+numeric_columns = ["units_sold", "forecast_units", "actual_units", "on_hand_units", "on_order_units", "selling_price", "unit_cost", "revenue", "inventory_value", "lead_time_days"]
 
-else:
-    st.warning("processed_data.csv not found.")
+for col in numeric_columns:
+    if col in df.columns:
+        df[col] = (df[col].astype(str).str.replace(",", "", regex=False).str.replace("₹", "", regex=False).str.strip())
+        df[col] = pd.to_numeric(df[col], errors="coerce")
 
 
-# Weekly Model Data
-if os.path.exists(WEEKLY_DATA_PATH):
-    try:
-        weekly_df = pd.read_csv(WEEKLY_DATA_PATH)
-    except Exception as e:
-        st.warning(f"Could not load weekly_model_data.csv: {e}")
-
-
-# Risk Data
-if os.path.exists(RISK_DATA_PATH):
-    try:
-        risk_df = pd.read_csv(RISK_DATA_PATH)
-    except Exception as e:
-        st.warning(f"Could not load sku_risk_analysis.csv: {e}")
-
-
-# Decisioning Data
-if os.path.exists(DECISION_GRID_PATH):
-    try:
-        decision_df = pd.read_csv(DECISION_GRID_PATH)
-    except Exception as e:
-        st.warning(f"Could not load decisioning_grid.csv: {e}")
+# DATE COLUMN
+date_columns = ["date", "week_start", "forecast_date"]
+for col in date_columns:
+    if col in df.columns:
+        df[col] = pd.to_datetime(df[col], errors="coerce")
 
 
 # BASIC VALIDATION
-if risk_df.empty and processed_df.empty:
-    st.error(
-        """
-        No dashboard data found.
-        Please make sure these files exist:
-        data/processed/processed_data.csv
-        data/risk_analysis/sku_risk_analysis.csv
-        """
-    )
+if "sku_id" not in df.columns:
+    st.error("Required column 'sku_id' not found in dataset.")
     st.stop()
 
-
-# PREPARE PROCESSED DATA
-if not processed_df.empty:
-    if "date" in processed_df.columns:
-        processed_df["date"] = pd.to_datetime(processed_df["date"], errors="coerce")
-        processed_df = processed_df.dropna(subset=["date"])
-        processed_df = processed_df.sort_values("date")
-
-
-# ADD CATEGORY TO RISK DATA
-if (not processed_df.empty and "sku_id" in processed_df.columns):
-    if "category" in processed_df.columns:
-        category_df = (processed_df[["sku_id", "category"]].dropna(subset=["sku_id"]).drop_duplicates(subset=["sku_id"], keep="last"))
-        if ("category" not in risk_df.columns and not risk_df.empty and "sku_id" in risk_df.columns):
-            risk_df = risk_df.merge(category_df, on="sku_id", how="left")
-
-        if ("category" not in decision_df.columns and not decision_df.empty and "sku_id" in decision_df.columns):
-            decision_df = decision_df.merge(category_df, on="sku_id", how="left")
-
-
-if risk_df.empty and not processed_df.empty:
-    risk_df = (processed_df.groupby("sku_id", as_index=False).tail(1).copy())
-
-
-# NORMALIZE SKU ID
-if "sku_id" in risk_df.columns:
-    risk_df["sku_id"] = (risk_df["sku_id"].astype(str).str.strip())
-
-if (not processed_df.empty and "sku_id" in processed_df.columns):
-    processed_df["sku_id"] = (processed_df["sku_id"].astype(str).str.strip())
-
-
-# CREATE FORECAST UNITS
-if "forecast_units" not in risk_df.columns:
-    if "Forecast_Units" in risk_df.columns:
-        risk_df["forecast_units"] = (risk_df["Forecast_Units"])
-
-    elif "forecast" in risk_df.columns:
-        risk_df["forecast_units"] = (risk_df["forecast"])
-    elif "Average_Daily_Demand" in risk_df.columns:
-        risk_df["forecast_units"] = (numeric_column(risk_df, "Average_Daily_Demand") * 7)
-
-    else:
-        risk_df["forecast_units"] = 0
-
-risk_df["forecast_units"] = numeric_column(risk_df, "forecast_units")
-
-
-# INVENTORY COLUMNS
-if "on_hand_units" not in risk_df.columns:
-    if "Current_Inventory" in risk_df.columns:
-        risk_df["on_hand_units"] = (risk_df["Current_Inventory"])
-
-    elif "inventory" in risk_df.columns:
-        risk_df["on_hand_units"] = (risk_df["inventory"])
-
-    else:
-        risk_df["on_hand_units"] = 0
-
-
-if "on_order_units" not in risk_df.columns:
-    if "On_Order_Units" in risk_df.columns:
-        risk_df["on_order_units"] = (risk_df["On_Order_Units"])
-
-    else:
-        risk_df["on_order_units"] = 0
-risk_df["on_hand_units"] = numeric_column(risk_df, "on_hand_units")
-risk_df["on_order_units"] = numeric_column(risk_df, "on_order_units")
-
-
-# CATEGORY
-if "category" not in risk_df.columns:
-    risk_df["category"] = "Unknown"
-risk_df["category"] = (risk_df["category"].fillna("Unknown").astype(str))
-
-
-# RISK LEVEL
-if "Risk_Level" not in risk_df.columns:
-    if "Risk" in risk_df.columns:
-        risk_df["Risk_Level"] = (risk_df["Risk"])
-
-    else:
-        inventory_ratio = np.where(risk_df["forecast_units"] > 0, ((risk_df["on_hand_units"] + risk_df["on_order_units"]) / risk_df["forecast_units"]) * 100, 0)
-        risk_df["Risk_Level"] = np.select([inventory_ratio < 100, inventory_ratio > 150], ["HIGH", "MEDIUM"], default="LOW")
-risk_df["Risk_Level"] = (risk_df["Risk_Level"].fillna("LOW").astype(str))
-
-# SALES AT RISK
-if "Sales_at_Risk" not in risk_df.columns:
-    price_col = first_existing_column(risk_df, ["selling_price", "list_price", "unit_price", "price"])
-
-    if price_col:
-        price = numeric_column(risk_df, price_col)
-
-    else:
-        price = pd.Series(0, index=risk_df.index)
-    shortage = (risk_df["forecast_units"] - (risk_df["on_hand_units"] + risk_df["on_order_units"])).clip(lower=0)
-    risk_df["Sales_at_Risk"] = (shortage * price)
-risk_df["Sales_at_Risk"] = numeric_column(risk_df, "Sales_at_Risk")
-
-
-# CAPITAL LOCKED
-if "Capital_Locked" not in risk_df.columns:
-    cost_col = first_existing_column(risk_df, ["unit_cost", "Unit_Cost", "cost"])
-    if cost_col:
-        unit_cost = numeric_column(risk_df, cost_col)
-    else:
-        unit_cost = pd.Series(0,index=risk_df.index)
-    excess = (risk_df["on_hand_units"] - (risk_df["forecast_units"] * 1.20)).clip(lower=0)
-    risk_df["Capital_Locked"] = (excess * unit_cost)
-risk_df["Capital_Locked"] = numeric_column(risk_df, "Capital_Locked")
-
-
-# RISK FLAGS
-def create_risk_flag(row):
-    risk = str(row.get("Risk_Level", "LOW")).upper()
-    stockout_score = float(row.get("Stockout_Risk_Score", 0))
-
-    overstock_score = float(row.get("Overstock_Risk_Score", 0))
-    if ("HIGH" in risk or stockout_score >= 0.75):
-        return "STOCKOUT"
-    elif ("MEDIUM" in risk or overstock_score >= 0.75):
-        return "OVERSTOCK"
-    else:
-        return "HEALTHY"
-risk_df["Risk_Flag"] = risk_df.apply(create_risk_flag, axis=1)
-
-
-# PRIORITY SCORE
-risk_df["Shortage_Units"] = (risk_df["forecast_units"] - (risk_df["on_hand_units"] + risk_df["on_order_units"])).clip(lower=0)
-risk_df["Priority_Score"] = (risk_df["Shortage_Units"] * 2 + risk_df["Sales_at_Risk"] / 1000)
-
-
-# RECOMMENDED ACTION
-def recommended_action(row):
-    flag = row["Risk_Flag"]
-    if "STOCKOUT" in flag:
-        return "REORDER NOW"
-
-    elif "OVERSTOCK" in flag:
-        return "MARKDOWN / CLEAR"
-    return "MONITOR"
-
-risk_df["Recommended_Action"] = risk_df.apply(recommended_action, axis=1)
+if "category" not in df.columns:
+    df["category"] = "Unknown"
 
 
 # SIDEBAR
-st.sidebar.title("PROJECT FORESIGHT")
-st.sidebar.markdown("### Demand & Inventory Intelligence")
+st.sidebar.title("Project FORESIGHT")
+st.sidebar.markdown("### Dashboard Filters")
 st.sidebar.markdown("---")
-st.sidebar.header("Dashboard Filters")
 
 
-# Category Filter
-categories = sorted(risk_df["category"].dropna().astype(str).unique().tolist())
+# CATEGORY FILTER
+categories = sorted(df["category"].dropna().astype(str).unique().tolist())
 selected_category = st.sidebar.selectbox("Category", ["All"] + categories)
+filtered_df = df.copy()
 
 
-# SKU Filter
-sku_values = sorted(risk_df["sku_id"].dropna().astype(str).unique().tolist())
+if selected_category != "All":
+    filtered_df = filtered_df[filtered_df["category"].astype(str) == selected_category]
+
+
+# SKU FILTER
+sku_values = sorted(
+    filtered_df["sku_id"].dropna().astype(str).unique().tolist())
 selected_sku = st.sidebar.selectbox("SKU", ["All"] + sku_values)
 
 
-# Risk Filter
-risk_options = ["All", "STOCKOUT", "OVERSTOCK", "HEALTHY"]
-selected_risk = st.sidebar.selectbox("Risk Flag", risk_options)
-
-
-# APPLY FILTERS
-filtered_df = risk_df.copy()
-if selected_category != "All":
-    filtered_df = filtered_df[filtered_df["category"] == selected_category]
-
 if selected_sku != "All":
-    filtered_df = filtered_df[filtered_df["sku_id"] == selected_sku]
-
-if selected_risk != "All":
-    filtered_df = filtered_df[filtered_df["Risk_Flag"] == selected_risk]
-
-if filtered_df.empty:
-    st.warning("No records found for selected filters.")
-    st.stop()
+    filtered_df = filtered_df[filtered_df["sku_id"].astype(str) == selected_sku]
 
 
-# DASHBOARD HEADER
-st.title("PROJECT FORESIGHT")
-st.subheader("Demand Forecasting & Inventory Intelligence Dashboard")
-st.caption("Weekly SKU-level demand planning, inventory risk and action prioritization")
-st.markdown("---")
+st.sidebar.markdown("---")
+st.sidebar.info("Weekly SKU-level Demand & Inventory Intelligence")
 
 
-# KPI CARDS
+# KPI CALCULATIONS
 total_skus = (filtered_df["sku_id"].nunique())
-total_forecast = (filtered_df["forecast_units"].sum())
-total_inventory = (filtered_df["on_hand_units"].sum())
-total_sales_risk = (filtered_df["Sales_at_Risk"].sum())
+if "units_sold" in filtered_df.columns:
+    total_demand = (filtered_df["units_sold"].fillna(0).sum())
 
-stockout_count = (filtered_df["Risk_Flag"].eq("STOCKOUT").sum())
-overstock_count = (filtered_df["Risk_Flag"].eq("OVERSTOCK").sum())
-c1, c2, c3, c4, c5, c6 = st.columns(6)
+else:
+    total_demand = 0
+
+if "forecast_units" in filtered_df.columns:
+    total_forecast = (filtered_df["forecast_units"].fillna(0).sum())
+
+else:
+    total_forecast = 0
+
+if "on_hand_units" in filtered_df.columns:
+    total_inventory = (filtered_df["on_hand_units"].fillna(0).sum())
+
+else:
+    total_inventory = 0
 
 
-with c1:
-    st.metric("SKUs", f"{total_skus:,}")
+# RISK CALCULATION
+if "forecast_units" in filtered_df.columns:
+    forecast_for_risk = (filtered_df["forecast_units"].fillna(0))
 
-with c2:
+else:
+    forecast_for_risk = pd.Series(0, index=filtered_df.index)
+
+
+if "on_hand_units" in filtered_df.columns:
+    inventory_for_risk = (filtered_df["on_hand_units"].fillna(0))
+
+else:
+    inventory_for_risk = pd.Series(0, index=filtered_df.index)
+
+
+if "on_order_units" in filtered_df.columns:
+    on_order_for_risk = (filtered_df["on_order_units"].fillna(0))
+
+else:
+    on_order_for_risk = pd.Series(0, index=filtered_df.index)
+
+available_inventory = (inventory_for_risk + on_order_for_risk)
+
+
+# STOCKOUT / OVERSTOCK FLAGS
+filtered_df["stockout_risk"] = (available_inventory < forecast_for_risk)
+filtered_df["overstock_risk"] = (available_inventory > forecast_for_risk * 1.5)
+
+
+def get_risk(row):
+    if row["stockout_risk"]:
+        return "High Stockout"
+    elif row["overstock_risk"]:
+        return "Overstock"
+    else:
+        return "Healthy"
+filtered_df["risk_level"] = (filtered_df.apply(get_risk, axis=1))
+
+
+# RISK COUNTS
+high_stockout_count = (filtered_df["risk_level"].eq("High Stockout").sum())
+overstock_count = (filtered_df["risk_level"].eq("Overstock").sum())
+healthy_count = (filtered_df["risk_level"].eq("Healthy").sum())
+
+
+# KPI SECTION
+st.header("Business Overview")
+col1, col2, col3, col4 = st.columns(4)
+
+with col1:
+    st.metric("Total SKUs", f"{total_skus:,}")
+
+with col2:
     st.metric("Forecast Demand", f"{total_forecast:,.0f}")
 
-with c3:
+with col3:
     st.metric("Current Inventory", f"{total_inventory:,.0f}")
 
-with c4:
-    st.metric("Sales at Risk", f"{total_sales_risk:,.0f}")
+with col4:
+    st.metric("Stockout Risk", f"{high_stockout_count:,}")
 
-with c5:
-    st.metric("Stockout Risks", f"{stockout_count:,}")
-
-with c6:
-    st.metric("Overstock Risks", f"{overstock_count:,}")
 st.markdown("---")
 
 
-# 1. FORECAST VS ACTUAL
-st.header("1. Forecast vs Actual")
-actual_df = pd.DataFrame()
+# RISK SUMMARY
+st.header("Inventory Risk Summary")
+r1, r2, r3 = st.columns(3)
+with r1:
+    st.error(f"High Stockout: {high_stockout_count}")
+
+with r2:
+    st.warning(f"Overstock: {overstock_count}")
+
+with r3:
+    st.success(f"Healthy: {healthy_count}")
+
+st.markdown("---")
 
 
-if not processed_df.empty:
-    actual_col = first_existing_column(processed_df, ["units_sold", "actual_units", "actual", "sales_units"])
+# FORECAST VS ACTUAL
+st.header("Forecast vs Actual")
+has_actual = "units_sold" in filtered_df.columns
+has_forecast = "forecast_units" in filtered_df.columns
 
-    if (actual_col and "date" in processed_df.columns):
-        actual_df = processed_df[["date", "sku_id", actual_col]].copy()
-        actual_df["Actual"] = pd.to_numeric(actual_df[actual_col], errors="coerce").fillna(0)
-        actual_df["Week"] = (actual_df["date"].dt.to_period("W").dt.start_time)
-        actual_df = (actual_df.groupby(["Week", "sku_id"], as_index=False)["Actual"].sum())
+if has_actual and has_forecast:
+    chart_df = filtered_df.copy()
 
+    if "week_start" in chart_df.columns:
+        chart_df = (chart_df.groupby("week_start", as_index=False).agg(Actual=("units_sold", "sum"), Forecast=("forecast_units", "sum")).sort_values("week_start"))
+        chart_df = chart_df.dropna(subset=["week_start"])
 
-if not actual_df.empty:
-    if selected_sku != "All":
-        actual_chart = actual_df[actual_df["sku_id"] == selected_sku].copy()
+        if not chart_df.empty:
+            chart_df = chart_df.melt(id_vars=["week_start"], value_vars=["Actual", "Forecast"], var_name="Type", value_name="Units")
+            fig = px.line(chart_df, x="week_start", y="Units", color="Type", markers=True, title="Weekly Forecast vs Actual Demand")
+            fig.update_layout(xaxis_title="Week", yaxis_title="Units")
+            st.plotly_chart(fig, use_container_width=True)
+
+        else:
+            st.info("No valid weekly data available.")
 
     else:
-        actual_chart = (actual_df.groupby("Week", as_index=False)["Actual"].sum())
-        actual_chart["sku_id"] = "All"
-
-
-    if selected_sku != "All":
-        selected_forecast = filtered_df[filtered_df["sku_id"] == selected_sku]["forecast_units"].sum()
-
-    else:
-        selected_forecast = (filtered_df["forecast_units"].sum())
-    actual_chart = (actual_chart.sort_values("Week").tail(8))
-    actual_chart["Forecast"] = (selected_forecast / max(len(actual_chart), 1))
-    chart_long = actual_chart[["Week", "Actual", "Forecast"]].melt(id_vars="Week", var_name="Type", value_name="Units")
-    forecast_actual_fig = px.line(chart_long, x="Week", y="Units", color="Type", markers=True, title="Weekly Actual Demand vs Forecast")
-    forecast_actual_fig.update_layout(xaxis_title="Week", yaxis_title="Units", height=450)
-    st.plotly_chart(forecast_actual_fig, use_container_width=True)
-
-
+        comparison = pd.DataFrame({"Type": ["Actual", "Forecast"], "Units": [filtered_df["units_sold"].fillna(0).sum(), filtered_df["forecast_units"].fillna(0).sum()]})
+        fig = px.bar(comparison, x="Type", y="Units", text_auto=True, title="Forecast vs Actual Demand")
+        st.plotly_chart(fig, use_container_width=True)
 else:
-    st.info(
-        """
-        Actual sales history is not available in processed_data.csv.
-        Expected column:
-        units_sold
-        """
-    )
+    st.info("Forecast or Actual demand columns are not available.")
+st.markdown("---")
+
+
+# RISK DISTRIBUTION
+st.header("Risk Distribution")
+risk_count = (filtered_df["risk_level"].value_counts().reset_index())
+risk_count.columns = ["Risk Level", "Count"]
+
+if not risk_count.empty:
+    risk_fig = px.pie(risk_count, names="Risk Level", values="Count", title="Inventory Risk Distribution", hole=0.4)
+    st.plotly_chart(risk_fig, use_container_width=True)
 
 st.markdown("---")
 
 
-# 2. RISK FLAGS
-st.header("2. Risk Flags")
-risk_counts = (filtered_df["Risk_Flag"].value_counts().reset_index())
-risk_counts.columns = ["Risk Flag", "SKU Count"]
-
-
-risk_fig = px.pie(risk_counts, names="Risk Flag", values="SKU Count", hole=0.45, title="Inventory Risk Distribution")
-st.plotly_chart(risk_fig, use_container_width=True)
-risk_table_columns = ["sku_id", "category", "forecast_units", "on_hand_units", "on_order_units", "Shortage_Units", "Risk_Flag", "Sales_at_Risk", "Capital_Locked", "Recommended_Action"]
-risk_table_columns = [col for col in risk_table_columns if col in filtered_df.columns]
-risk_table = (filtered_df[risk_table_columns].sort_values("Sales_at_Risk", ascending=False).head(20).copy())
-risk_table = risk_table.rename(columns={"sku_id": "SKU", "category": "Category", "forecast_units": "Forecast Units", "on_hand_units": "On Hand", "on_order_units": "On Order", "Shortage_Units": "Shortage Units", "Risk_Flag": "Risk", "Sales_at_Risk": "Sales at Risk", "Capital_Locked": "Capital Locked", "Recommended_Action": "Action"})
-st.dataframe(risk_table, use_container_width=True, hide_index=True)
-st.markdown("---")
-
-
-# 3. PRIORITIZED REORDER LIST
-st.header("3. Prioritized Reorder List")
-st.info("SKUs with the highest shortage and business impact are prioritized first.")
-reorder_df = filtered_df[filtered_df["Shortage_Units"] > 0].copy()
-reorder_df = reorder_df[(reorder_df["Risk_Flag"] == "STOCKOUT") | (reorder_df["Shortage_Units"] > 0)]
-reorder_df = reorder_df.sort_values(["Priority_Score", "Sales_at_Risk", "Shortage_Units"], ascending=False)
-reorder_df = reorder_df.head(20)
-
+# PRIORITIZED REORDER LIST
+st.header("Prioritized Reorder List")
+reorder_df = filtered_df[filtered_df["risk_level"] == "High Stockout"].copy()
 
 if not reorder_df.empty:
-    reorder_display = reorder_df[["sku_id", "category", "forecast_units", "on_hand_units", "on_order_units", "Shortage_Units", "Sales_at_Risk", "Risk_Flag", "Priority_Score", "Recommended_Action"]].copy()
-    reorder_display = reorder_display.rename(columns={"sku_id": "SKU", "category": "Category", "forecast_units": "Forecast Demand", "on_hand_units": "On Hand", "on_order_units": "On Order", "Shortage_Units": "Shortage", "Sales_at_Risk": "Sales at Risk", "Risk_Flag": "Risk", "Priority_Score": "Priority", "Recommended_Action": "Action"})
-    st.dataframe(reorder_display, use_container_width=True, hide_index=True)
-    st.download_button(label="Download Reorder List", data=reorder_display.to_csv(index=False).encode("utf-8"), file_name="prioritized_reorder_list.csv", mime="text/csv", use_container_width=True)
+    reorder_df["shortage_units"] = (forecast_for_risk.loc[reorder_df.index] - available_inventory.loc[reorder_df.index]).clip(lower=0)
+    reorder_df["priority"] = (reorder_df["shortage_units"].rank(ascending=False, method="dense"))
+    reorder_columns = ["sku_id", "category"]
 
+    if "forecast_units" in reorder_df.columns:
+        reorder_columns.append("forecast_units")
+
+    if "on_hand_units" in reorder_df.columns:
+        reorder_columns.append("on_hand_units")
+
+    if "on_order_units" in reorder_df.columns:
+        reorder_columns.append("on_order_units")
+
+    reorder_columns += ["shortage_units", "priority"]
+    reorder_display = (reorder_df[reorder_columns].sort_values("shortage_units", ascending=False).head(20).copy())
+
+    for col in reorder_display.columns:
+        if col not in ["sku_id", "category"]:
+            reorder_display[col] = pd.to_numeric(reorder_display[col], errors="coerce")
+
+    st.dataframe(
+        reorder_display, use_container_width=True, hide_index=True)
 
 else:
-    st.success("No immediate reorder requirement found.")
+    st.success("No high stockout SKUs found.")
 
 st.markdown("---")
 
 
-# 4. MARKDOWN LIST
-st.header("4. Markdown / Clearance List")
-st.info("SKUs with excess inventory relative to forecast demand are prioritized for markdown/clearance.")
-markdown_df = filtered_df.copy()
-markdown_df["Excess_Units"] = (markdown_df["on_hand_units"] - (markdown_df["forecast_units"] * 1.20)).clip(lower=0)
-markdown_df = markdown_df[markdown_df["Excess_Units"] > 0]
-markdown_df["Markdown_Value"] = (markdown_df["Excess_Units"] * (markdown_df["Capital_Locked"] / markdown_df["Excess_Units"].replace(0, np.nan)).fillna(0))
-markdown_df = markdown_df.sort_values("Capital_Locked", ascending=False)
-markdown_df = markdown_df.head(20)
-
+# MARKDOWN LIST
+st.header("Prioritized Markdown List")
+markdown_df = filtered_df[filtered_df["risk_level"] == "Overstock"].copy()
 
 if not markdown_df.empty:
-    markdown_display = markdown_df[["sku_id", "category", "forecast_units", "on_hand_units", "Excess_Units", "Capital_Locked", "Risk_Flag", "Recommended_Action"]].copy()
-    markdown_display = markdown_display.rename(columns={"sku_id": "SKU", "category": "Category", "forecast_units": "Forecast Demand", "on_hand_units": "On Hand", "Excess_Units": "Excess Units", "Capital_Locked": "Capital Locked", "Risk_Flag": "Risk", "Recommended_Action": "Action"})
-    st.dataframe(markdown_display, use_container_width=True, hide_index=True)
-    st.download_button(label="Download Markdown List", data=markdown_display.to_csv(index=False).encode("utf-8"), file_name="markdown_clearance_list.csv", mime="text/csv", use_container_width=True)
+    markdown_df["excess_units"] = (available_inventory.loc[markdown_df.index] - (forecast_for_risk.loc[markdown_df.index] * 1.5)).clip(lower=0)
+    markdown_df = (markdown_df.sort_values("excess_units", ascending=False).head(20))
+    markdown_columns = ["sku_id", "category"]
 
+    if "forecast_units" in markdown_df.columns:
+        markdown_columns.append("forecast_units")
+
+    if "on_hand_units" in markdown_df.columns:
+        markdown_columns.append("on_hand_units")
+
+    if "on_order_units" in markdown_df.columns:
+        markdown_columns.append("on_order_units")
+
+    markdown_columns.append("excess_units")
+    markdown_display = (markdown_df[markdown_columns].copy())
+
+    for col in markdown_display.columns:
+        if col not in ["sku_id", "category"]:
+            markdown_display[col] = pd.to_numeric(markdown_display[col], errors="coerce")
+
+    st.dataframe(markdown_display, use_container_width=True, hide_index=True)
 
 else:
-    st.success("No significant excess inventory found.")
+    st.success("No overstock SKUs found.")
+
 st.markdown("---")
 
 
-# 5. FORECAST DEMAND BY CATEGORY
-st.header("5. Forecast Demand by Category")
-category_forecast = (filtered_df.groupby("category", as_index=False).agg(Forecast_Demand=("forecast_units", "sum"), Current_Inventory=("on_hand_units", "sum")))
-category_long = category_forecast.melt(id_vars="category", value_vars=["Forecast_Demand", "Current_Inventory"], var_name="Metric", value_name="Units")
-category_fig = px.bar(category_long, x="category", y="Units", color="Metric", barmode="group", title="Forecast Demand vs Current Inventory by Category")
-category_fig.update_layout(xaxis_title="Category", yaxis_title="Units", height=450)
-st.plotly_chart(category_fig, use_container_width=True)
+# INVENTORY VS FORECAST
+st.header("Inventory vs Forecast")
+if ("forecast_units" in filtered_df.columns and "on_hand_units" in filtered_df.columns):
+    comparison_df = pd.DataFrame({
+        "Metric": ["Forecast Demand", "On-Hand Inventory", "On-Order Inventory"],
+        "Units": [filtered_df["forecast_units"].fillna(0).sum(),
+            filtered_df["on_hand_units"].fillna(0).sum(),
+            filtered_df["on_order_units"].fillna(0).sum()
+            if "on_order_units" in filtered_df.columns
+            else 0
+        ]
+    })
+
+    comparison_df["Units"] = pd.to_numeric(comparison_df["Units"], errors="coerce")
+    comparison_fig = px.bar(comparison_df, x="Metric", y="Units", text_auto=True, title="Forecast Demand vs Available Inventory")
+    comparison_fig.update_layout(xaxis_title="Metric", yaxis_title="Units")
+    st.plotly_chart(comparison_fig, use_container_width=True)
+
 st.markdown("---")
 
 
-# 6. TOP SKU FORECAST
-st.header("6. Top SKU Forecast Demand")
-top_forecast = (filtered_df[["sku_id", "category", "forecast_units"]].sort_values("forecast_units", ascending=False).head(15))
-forecast_fig = px.bar(top_forecast, x="sku_id", y="forecast_units", color="category", text_auto=True, title="Top 15 SKU Forecast Demand")
-forecast_fig.update_layout(xaxis_title="SKU", yaxis_title="Forecast Units", height=500)
-st.plotly_chart(forecast_fig, use_container_width=True)
+# DASHBOARD DATA
+st.header("Dashboard Data")
+display_df = filtered_df.copy()
+
+for col in display_df.columns:
+    if col not in ["sku_id", "category", "risk_level"]:
+        if display_df[col].dtype == "object":
+            cleaned = (display_df[col].astype(str).str.replace(",", "", regex=False).str.replace("₹", "", regex=False).str.strip())
+            converted = pd.to_numeric(cleaned, errors="coerce")
+            if converted.notna().mean() >= 0.80:
+                display_df[col] = converted
+
+st.dataframe(display_df, use_container_width=True, hide_index=True)
 st.markdown("---")
 
 
-# 7. INVENTORY POSITION
-st.header("7. Inventory Position")
-inventory_chart_df = filtered_df[["sku_id", "forecast_units", "on_hand_units", "on_order_units"]].copy()
-inventory_chart_df = (inventory_chart_df.sort_values("forecast_units", ascending=False).head(15))
-inventory_long = inventory_chart_df.melt(id_vars="sku_id", value_vars=["forecast_units", "on_hand_units", "on_order_units"], var_name="Inventory Metric", value_name="Units")
-inventory_long["Inventory Metric"] = (inventory_long["Inventory Metric"].replace({"forecast_units": "Forecast", "on_hand_units": "On Hand", "on_order_units": "On Order"}))
-inventory_fig = px.bar(inventory_long, x="sku_id", y="Units", color="Inventory Metric", barmode="group", title="Forecast vs On-Hand vs On-Order Inventory")
-inventory_fig.update_layout( xaxis_title="SKU", yaxis_title="Units", height=500)
-st.plotly_chart(inventory_fig, use_container_width=True)
+# DOWNLOAD CSV
+st.header("Download Dashboard Data")
+csv_data = (display_df.to_csv(index=False).encode("utf-8"))
+st.download_button(label="Download Dashboard CSV", data=csv_data, file_name="foresight_dashboard.csv", mime="text/csv")
 st.markdown("---")
-
-
-# 8. BUSINESS RECOMMENDATIONS
-st.header("8. Business Recommendations")
-recommendation_col1, recommendation_col2 = st.columns(2)
-
-
-with recommendation_col1:
-    st.subheader("Stockout Actions")
-    st.markdown(
-        """
-        - Prioritize high-shortage SKUs.
-        - Review on-hand + on-order inventory.
-        - Replenish critical SKUs first.
-        - Monitor forecast demand weekly.
-        - Protect high-value SKUs from stockouts.
-        """
-    )
-
-
-with recommendation_col2:
-    st.subheader("Overstock Actions")
-    st.markdown(
-        """
-        - Identify excess inventory.
-        - Reduce future procurement.
-        - Run markdown/clearance campaigns.
-        - Bundle slow-moving products.
-        - Improve inventory turnover.
-        """
-    )
-st.markdown("---")
-
-
-# 9. DASHBOARD SUMMARY
-st.header("9. Dashboard Summary")
-reorder_count = len(reorder_df)
-markdown_count = len(markdown_df)
-
-
-summary_df = pd.DataFrame(
-    {
-        "Metric": ["SKUs Analysed", "Forecast Demand", "Current Inventory", "Sales at Risk", "Stockout Risk SKUs", "Overstock Risk SKUs", "Prioritized Reorder SKUs", "Markdown / Clearance SKUs"],
-        "Value": [total_skus, f"{total_forecast:,.0f}", f"{total_inventory:,.0f}", f"{total_sales_risk:,.0f}", stockout_count, overstock_count, reorder_count, markdown_count]
-    }
-)
-
-
-st.dataframe(summary_df, use_container_width=True, hide_index=True)
-st.markdown("---")
-
-
-# 10. DOWNLOAD COMPLETE DASHBOARD DATA
-st.header("10. Download Dashboard Data")
-download_columns = ["sku_id", "category", "forecast_units", "on_hand_units", "on_order_units", "Shortage_Units", "Risk_Flag", "Priority_Score", "Sales_at_Risk", "Capital_Locked", "Recommended_Action"]
-download_columns = [col for col in download_columns if col in filtered_df.columns]
-download_df = filtered_df[download_columns].copy()
-download_csv = (download_df.to_csv(index=False).encode("utf-8"))
-st.download_button(label="Download Complete Dashboard CSV", data=download_csv, file_name="foresight_dashboard_data.csv", mime="text/csv", use_container_width=True)
 
 
 # FOOTER
-st.markdown("---")
 st.caption("Project FORESIGHT | AI-Powered Demand Forecasting & Inventory Intelligence")
