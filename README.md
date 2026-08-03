@@ -506,7 +506,7 @@ The dashboard is deployed as a public Streamlit application.
 
 ```text
 Dashboard URL:
-https://YOUR-DASHBOARD-URL.streamlit.app
+https://chaudhariutkarsh-projectforesightdemandinventoryintelligence-b.streamlit.app/
 ```
 
 ### FastAPI Scoring Service
@@ -515,7 +515,7 @@ The scoring API is deployed as a public FastAPI service.
 
 ```text
 API URL:
-https://YOUR-API-URL
+https://chaudhariutkarsh-project-foresight.onrender.com
 ```
 
 Both URLs should be publicly accessible without requiring the local development environment.
