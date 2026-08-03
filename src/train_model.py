@@ -9,286 +9,338 @@ from sklearn.preprocessing import LabelEncoder
 from xgboost import XGBRegressor
 from lightgbm import LGBMRegressor
 
-from data_loader import DataLoader
-from preprocessing import DataPreprocessor
-from feature_engineering import FeatureEngineering
-from evaluate import ModelEvaluator
+from baseline import SeasonalNaiveBaseline
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 logger = logging.getLogger(__name__)
 
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_PATH = os.path.join(BASE_DIR, "data", "processed", "processed_data.csv")
+MODEL_DIR = os.path.join(BASE_DIR, "models")
+WEEKLY_DATA_PATH = os.path.join(BASE_DIR, "data", "processed", "weekly_model_data.csv")
+
+SEASON_LENGTH = 4
+N_SPLITS = 5
+TARGET = "weekly_units_sold"
 
 FEATURES = [
-    "year", "month", "week", "day", "day_of_week", "quarter", "is_weekend",
-    "lag_1", "lag_7", "lag_14",
-    "rolling_mean_7", "rolling_std_7", "rolling_mean_30",
-    "price_difference", "discount_percentage",
+    "year", "month", "week", "quarter",
+    "lag_1", "lag_2", "lag_4",
+    "rolling_mean_4", "rolling_std_4", "rolling_mean_8",
+    "avg_unit_price", "promotion_rate",
     "inventory_gap", "total_inventory",
-    "on_hand_units", "on_order_units", "reorder_point"
+    "on_hand_units", "on_order_units", "reorder_point",
+    "sku_id_enc"
 ]
-
-TARGET    = "units_sold"
-MODEL_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "models")
 
 
 def compute_wape(y_true, y_pred):
-    y_true = np.array(y_true)
-    y_pred = np.array(y_pred)
-    denom  = np.sum(np.abs(y_true))
-    return (np.sum(np.abs(y_true - y_pred)) / denom) * 100 if denom > 0 else 0.0
+    y_true = np.asarray(y_true, dtype=float)
+    y_pred = np.asarray(y_pred, dtype=float)
+    denom = np.sum(np.abs(y_true))
+    return float(np.sum(np.abs(y_true - y_pred)) / denom * 100) if denom > 0 else 0.0
 
 
-def baseline_wape(y_true, season_length=7):
-    """Seasonal Naive: predict value from `season_length` steps ago."""
-    y_true  = np.array(y_true)
-    y_naive = np.concatenate([np.full(season_length, np.nan), y_true[:-season_length]])
-    mask = ~np.isnan(y_naive)
-    return compute_wape(y_true[mask], y_naive[mask])
+def prepare_weekly_data():
+    """Create one clean row per SKU/week from the processed daily extract."""
+    if not os.path.exists(DATA_PATH):
+        raise FileNotFoundError(f"Processed data not found: {DATA_PATH}")
+
+    df = pd.read_csv(DATA_PATH)
+    df["date"] = pd.to_datetime(df["date"], errors="coerce")
+    df = df.dropna(subset=["date", "sku_id"])
+    df["sku_id"] = df["sku_id"].astype(str)
+    df["units_sold"] = pd.to_numeric(df["units_sold"], errors="coerce").fillna(0).clip(lower=0)
+
+    # processed_data can contain multiple transaction/inventory rows for a SKU/date.
+    # Aggregate to one SKU/day before converting to weekly grain.
+    daily = (
+        df.groupby(["sku_id", "date"], as_index=False)
+        .agg(
+            units_sold=("units_sold", "sum"),
+            avg_unit_price=("unit_price", "mean"),
+            promotion=("promotion", "max"),
+            list_price=("list_price", "first"),
+            reorder_point=("reorder_point", "last"),
+            on_hand_units=("on_hand_units", "last"),
+            on_order_units=("on_order_units", "last"),
+        )
+    )
+
+    daily["date"] = pd.to_datetime(daily["date"])
+    daily["week_start"] = (
+        daily["date"] - pd.to_timedelta(daily["date"].dt.dayofweek, unit="D")
+    ).dt.normalize()
+
+    # Weekly demand target and weekly known/lagged drivers.
+    weekly = (
+        daily.sort_values(["sku_id", "date"])
+        .groupby(["sku_id", "week_start"], as_index=False)
+        .agg(
+            weekly_units_sold=("units_sold", "sum"),
+            avg_unit_price=("avg_unit_price", "mean"),
+            promotion_rate=("promotion", "mean"),
+            list_price=("list_price", "last"),
+            reorder_point=("reorder_point", "last"),
+            on_hand_units=("on_hand_units", "last"),
+            on_order_units=("on_order_units", "last"),
+        )
+    )
+
+    weekly = weekly.sort_values(["sku_id", "week_start"]).reset_index(drop=True)
+    g = weekly.groupby("sku_id", group_keys=False)
+
+    # Demand history features use only information available before the target week.
+    weekly["lag_1"] = g["weekly_units_sold"].shift(1)
+    weekly["lag_2"] = g["weekly_units_sold"].shift(2)
+    weekly["lag_4"] = g["weekly_units_sold"].shift(4)
+    weekly["rolling_mean_4"] = g["weekly_units_sold"].transform(
+        lambda s: s.shift(1).rolling(4, min_periods=1).mean()
+    )
+    weekly["rolling_std_4"] = g["weekly_units_sold"].transform(
+        lambda s: s.shift(1).rolling(4, min_periods=2).std()
+    )
+    weekly["rolling_mean_8"] = g["weekly_units_sold"].transform(
+        lambda s: s.shift(1).rolling(8, min_periods=1).mean()
+    )
+
+    # Exogenous values are also lagged one week so same-week information cannot leak.
+    for col in [
+        "avg_unit_price", "promotion_rate", "reorder_point",
+        "on_hand_units", "on_order_units"
+    ]:
+        weekly[col] = g[col].shift(1)
+
+    weekly["inventory_gap"] = weekly["on_hand_units"] - weekly["reorder_point"]
+    weekly["total_inventory"] = weekly["on_hand_units"] + weekly["on_order_units"]
+
+    weekly["year"] = weekly["week_start"].dt.year
+    weekly["month"] = weekly["week_start"].dt.month
+    weekly["week"] = weekly["week_start"].dt.isocalendar().week.astype(int)
+    weekly["quarter"] = weekly["week_start"].dt.quarter
+
+    weekly = weekly.replace([np.inf, -np.inf], np.nan)
+    weekly["avg_unit_price"] = weekly["avg_unit_price"].fillna(0)
+    weekly["promotion_rate"] = weekly["promotion_rate"].fillna(0)
+    weekly["reorder_point"] = weekly["reorder_point"].fillna(0)
+    weekly["on_hand_units"] = weekly["on_hand_units"].fillna(0)
+    weekly["on_order_units"] = weekly["on_order_units"].fillna(0)
+    weekly["inventory_gap"] = weekly["inventory_gap"].fillna(0)
+    weekly["total_inventory"] = weekly["total_inventory"].fillna(0)
+
+    # Keep enough history for lag/rolling features, then fill early lag values
+    # with zero so every SKU can be scored.
+    for col in ["lag_1", "lag_2", "lag_4", "rolling_mean_4", "rolling_std_4", "rolling_mean_8"]:
+        weekly[col] = weekly[col].fillna(0)
+
+    weekly.to_csv(WEEKLY_DATA_PATH, index=False)
+    logger.info("Weekly model data saved: %s | shape=%s", WEEKLY_DATA_PATH, weekly.shape)
+    return weekly
 
 
-def rolling_origin_splits(dates, n_splits=5):
-    """
-    Date-based rolling-origin splits.
+def rolling_origin_splits(unique_dates, n_splits=5):
+    unique_dates = np.array(sorted(pd.to_datetime(unique_dates).unique()))
+    if len(unique_dates) < n_splits + 1:
+        raise ValueError("Not enough weekly periods for rolling-origin CV.")
 
-    Divides the full date range into (n_splits + 1) equal windows.
-    Each fold expands the training window by one window and validates on the immediately following window — no data leakage.
+    # Use approximately equal validation blocks, with expanding training windows.
+    val_size = max(1, len(unique_dates) // (n_splits + 1))
+    first_train_end = len(unique_dates) - n_splits * val_size
+    if first_train_end < 1:
+        first_train_end = 1
 
-    Fold 1 : Train [window 0]            Val [window 1]
-    Fold 2 : Train [window 0-1]          Val [window 2]
-    Fold 3 : Train [window 0-2]          Val [window 3]
-    Fold 4 : Train [window 0-3]          Val [window 4]
-    Fold 5 : Train [window 0-4]          Val [window 5]
-
-    Yields
-    ------
-    fold        : int
-    train_mask  : boolean Series
-    val_mask    : boolean Series
-    train_start : date
-    train_end   : date
-    val_start   : date
-    val_end     : date
-    """
-    unique_dates = np.sort(dates.unique())
-    total_days   = len(unique_dates)
-    window_size  = total_days // (n_splits + 1)
-
-    for fold in range(1, n_splits + 1):
-        train_end_idx = fold * window_size - 1
-        val_end_idx   = min((fold + 1) * window_size - 1, total_days - 1)
-        train_dates = unique_dates[:train_end_idx + 1]
-        val_dates   = unique_dates[train_end_idx + 1 : val_end_idx + 1]
-
-        if len(val_dates) == 0:
+    for fold in range(n_splits):
+        train_end = first_train_end + fold * val_size
+        val_start = train_end
+        val_end = min(val_start + val_size, len(unique_dates))
+        if val_start >= val_end:
             continue
-
-        train_mask = dates.isin(train_dates)
-        val_mask   = dates.isin(val_dates)
-        yield (fold, train_mask, val_mask, train_dates[0],  train_dates[-1], val_dates[0],    val_dates[-1])
+        train_dates = unique_dates[:train_end]
+        val_dates = unique_dates[val_start:val_end]
+        yield fold + 1, train_dates, val_dates
 
 
 class ModelTrainer:
     def __init__(self, df):
-        self.df       = df.copy().sort_values("date").reset_index(drop=True)
-        self.le       = LabelEncoder()
-        self.features = None
+        self.df = df.copy().sort_values(["week_start", "sku_id"]).reset_index(drop=True)
+        self.le = LabelEncoder()
         os.makedirs(MODEL_DIR, exist_ok=True)
 
     def prepare_xy(self):
-        logger.info("Preparing features...")
-        df = self.df.copy()
+        self.df["sku_id"] = self.df["sku_id"].astype(str)
+        self.df["sku_id_enc"] = self.le.fit_transform(self.df["sku_id"])
+        joblib.dump(self.le, os.path.join(MODEL_DIR, "label_encoder.pkl"))
+        return self.df, FEATURES
 
-        if "sku_id" in df.columns:
-            df["sku_id_enc"] = self.le.fit_transform(df["sku_id"].astype(str))
-            joblib.dump(self.le, os.path.join(MODEL_DIR, "label_encoder.pkl"))
-            logger.info("label_encoder.pkl saved.")
+    def baseline_cv(self, n_splits=N_SPLITS):
+        baseline = SeasonalNaiveBaseline(SEASON_LENGTH)
+        all_true, all_pred = [], []
 
-        features = [f for f in FEATURES if f in df.columns]
-        if "sku_id_enc" in df.columns:
-            features.append("sku_id_enc")
+        for _, train_dates, val_dates in rolling_origin_splits(self.df["week_start"], n_splits):
+            train_end = train_dates[-1]
+            val_start = val_dates[0]
+            val_end = val_dates[-1]
 
-        self.features = features
-        self.df       = df          # keep encoded df for rolling-origin
-        return df, features
+            train = self.df[self.df["week_start"] <= train_end]
+            val = self.df[
+                (self.df["week_start"] >= val_start) &
+                (self.df["week_start"] <= val_end)
+            ].copy()
 
-    def rolling_origin_cv(self, model_cls, model_kwargs, n_splits=5):
-        """
-        Proper date-based rolling-origin cross-validation.
+            # Look up the value four weeks before each validation week for the same SKU.
+            lookup = self.df[["sku_id", "week_start", TARGET]].copy()
+            lookup["source_week"] = lookup["week_start"] + pd.Timedelta(weeks=SEASON_LENGTH)
+            lookup = lookup.rename(columns={TARGET: "baseline_forecast"})
 
-        - Trains on all past dates up to train_end
-        - Validates on the immediately following date window
-        - Prints fold-level details: date ranges + WAPE
-        - Returns mean WAPE and per-fold WAPE list
-        """
-        df    = self.df
-        dates = df["date"]
-        wapes = []
+            val = val.merge(
+                lookup[["sku_id", "source_week", "baseline_forecast"]],
+                left_on=["sku_id", "week_start"],
+                right_on=["sku_id", "source_week"],
+                how="left"
+            )
 
-        print(f"\n  {'Fold':<6} {'Train Start':<14} {'Train End':<14} "
-              f"{'Val Start':<14} {'Val End':<14} {'WAPE':>8}")
-        print("  " + "-" * 74)
+            # If the 4-week history is unavailable, use the SKU training mean.
+            means = train.groupby("sku_id")[TARGET].mean()
+            val["baseline_forecast"] = val.apply(
+                lambda r: r["baseline_forecast"] if pd.notna(r["baseline_forecast"])
+                else means.get(r["sku_id"], 0), axis=1
+            ).clip(lower=0)
 
-        for fold, train_mask, val_mask, tr_s, tr_e, vl_s, vl_e in \
-                rolling_origin_splits(dates, n_splits):
+            all_true.extend(val[TARGET].tolist())
+            all_pred.extend(val["baseline_forecast"].tolist())
 
-            X_tr = df.loc[train_mask, self.features].values
-            y_tr = df.loc[train_mask, TARGET].values
-            X_vl = df.loc[val_mask,   self.features].values
-            y_vl = df.loc[val_mask,   TARGET].values
+        return compute_wape(all_true, all_pred)
 
-            if len(y_vl) == 0:
-                continue
+    def rolling_origin_cv(self, model_cls, model_kwargs, n_splits=N_SPLITS):
+        fold_wapes = []
 
-            m = model_cls(**model_kwargs)
-            m.fit(X_tr, y_tr)
-            y_pred = np.maximum(m.predict(X_vl), 0)
+        for fold, train_dates, val_dates in rolling_origin_splits(self.df["week_start"], n_splits):
+            train = self.df[self.df["week_start"].isin(train_dates)]
+            val = self.df[self.df["week_start"].isin(val_dates)]
 
-            w = compute_wape(y_vl, y_pred)
-            wapes.append(w)
+            model = model_cls(**model_kwargs)
+            model.fit(train[FEATURES], train[TARGET])
+            pred = np.maximum(model.predict(val[FEATURES]), 0)
+            wape = compute_wape(val[TARGET], pred)
+            fold_wapes.append(float(wape))
 
-            print(f"  {fold:<6} "
-                  f"{str(tr_s)[:10]:<14} {str(tr_e)[:10]:<14} "
-                  f"{str(vl_s)[:10]:<14} {str(vl_e)[:10]:<14} "
-                  f"{w:>7.2f}%")
+            logger.info(
+                "%s fold %d | train=%s..%s | val=%s..%s | WAPE=%.2f%%",
+                model_cls.__name__, fold,
+                train_dates[0].date(), train_dates[-1].date(),
+                val_dates[0].date(), val_dates[-1].date(), wape
+            )
 
-        print("  " + "-" * 74)
-        mean_wape = float(np.mean(wapes))
-        print(f"  {'Mean CV WAPE':<54} {mean_wape:>7.2f}%\n")
-        return mean_wape, wapes
+        return float(np.mean(fold_wapes)), fold_wapes
 
     def train(self):
         df, features = self.prepare_xy()
 
-        # Baseline WAPE on full sorted target
-        b_wape = baseline_wape(df[TARGET].values, season_length=7)
-        logger.info(f"Baseline WAPE (Seasonal Naive, lag-7): {b_wape:.2f}%")
+        baseline_wape_value = self.baseline_cv()
+        logger.info("Seasonal-naive baseline CV WAPE: %.2f%%", baseline_wape_value)
 
         model_configs = {
             "xgboost": (
                 XGBRegressor,
-                dict(n_estimators=300, learning_rate=0.05, max_depth=6,
-                     random_state=42, verbosity=0)
+                dict(
+                    n_estimators=350,
+                    learning_rate=0.05,
+                    max_depth=6,
+                    subsample=0.9,
+                    colsample_bytree=0.9,
+                    random_state=42,
+                    objective="reg:squarederror",
+                    verbosity=0,
+                ),
             ),
             "lightgbm": (
                 LGBMRegressor,
-                dict(n_estimators=300, learning_rate=0.05, max_depth=6,
-                     random_state=42, verbose=-1)
-            )
+                dict(
+                    n_estimators=350,
+                    learning_rate=0.05,
+                    max_depth=6,
+                    num_leaves=31,
+                    random_state=42,
+                    verbosity=-1,
+                ),
+            ),
         }
 
         results = {}
+        for name, (model_cls, kwargs) in model_configs.items():
+            cv_wape, fold_wapes = self.rolling_origin_cv(model_cls, kwargs)
 
-        for name, (model_cls, model_kwargs) in model_configs.items():
-            print("\n" + "=" * 78)
-            print(f"  ROLLING-ORIGIN BACKTESTING — {name.upper()}  (5 Folds, Date-Based)")
-            print("=" * 78)
+            final_model = model_cls(**kwargs)
+            final_model.fit(df[features], df[TARGET])
 
-            cv_wape, fold_results = self.rolling_origin_cv(model_cls, model_kwargs, n_splits=5)
+            train_pred = np.maximum(final_model.predict(df[features]), 0)
+            residual_std = float(np.std(df[TARGET].values - train_pred, ddof=1))
+            uncertainty_margin = 1.2816 * residual_std
 
-            # Final fit on full data
-            final_model = model_cls(**model_kwargs)
-            final_model.fit(df[features].values, df[TARGET].values)
-            y_pred     = np.maximum(final_model.predict(df[features].values), 0)
-            evaluator  = ModelEvaluator(df[TARGET].values, y_pred)
-            metrics    = evaluator.summary()
-            model_wape = metrics["WAPE (%)"]
+            improvement = baseline_wape_value - cv_wape
+            results[name] = {
+                "CV_WAPE (%)": round(cv_wape, 2),
+                "Baseline_WAPE (%)": round(baseline_wape_value, 2),
+                "WAPE_Improvement": round(improvement, 2),
+                "Fold_WAPEs": [round(x, 2) for x in fold_wapes],
+                "Prediction_Interval_Margin": round(uncertainty_margin, 4),
+                "Uncertainty_Level": "80%",
+                "Residual_STD": round(residual_std, 4),
+            }
 
-            metrics["CV_WAPE (%)"] = round(cv_wape, 2)
-            metrics["Baseline_WAPE (%)"] = round(b_wape, 2)
-            metrics["WAPE_Improvement"] = round(b_wape - cv_wape, 2)
-            metrics["Rolling_Origin_Folds"] = fold_results
-            metrics["Fold_WAPEs"] = fold_results
-            results[name] = metrics
+            joblib.dump(final_model, os.path.join(MODEL_DIR, f"{name}_model.pkl"))
 
+        # Per requirement, select the lowest CV WAPE model. If all ML models lose,
+        # the baseline is the honest production choice.
+        best_ml = min(results, key=lambda k: results[k]["CV_WAPE (%)"])
+        if results[best_ml]["CV_WAPE (%)"] < baseline_wape_value:
+            best_name = best_ml
+        else:
+            best_name = "seasonal_naive"
 
-            # Calculate residuals from full-data fitted model
-            residuals = df[TARGET].values - y_pred
+        if best_name == "seasonal_naive":
+            joblib.dump(SeasonalNaiveBaseline(SEASON_LENGTH), os.path.join(MODEL_DIR, "best_model.pkl"))
+        else:
+            best_model = joblib.load(os.path.join(MODEL_DIR, f"{best_name}_model.pkl"))
+            joblib.dump(best_model, os.path.join(MODEL_DIR, "best_model.pkl"))
 
-            # Residual standard deviation
-            residual_std = float(np.std(residuals, ddof=1))
-            z_80 = 1.2816
+        metadata = {
+            "target": TARGET,
+            "features": features,
+            "forecast_grain": "weekly",
+            "forecast_horizon_min_weeks": 6,
+            "forecast_horizon_max_weeks": 8,
+            "seasonal_naive_season_length_weeks": SEASON_LENGTH,
+            "best_model": best_name,
+            "baseline_cv_wape": round(baseline_wape_value, 2),
+            "note": "Four-week seasonal-naive lag is used because the supplied history is approximately one year; a 52-week lag would not provide a fair prior-year backtest.",
+        }
+        with open(os.path.join(MODEL_DIR, "model_metadata.json"), "w", encoding="utf-8") as f:
+            json.dump(metadata, f, indent=4)
 
-            # Margin of uncertainty
-            uncertainty_margin = z_80 * residual_std
-            metrics["Uncertainty_Level"] = "80%"
-            metrics["Residual_STD"] = round(residual_std, 4)
-            metrics["Prediction_Interval_Margin"] = round(uncertainty_margin, 4)
-            logger.info(f"80% Forecast Uncertainty Interval calculated | " f"Margin = ±{uncertainty_margin:.4f}")
+        results["best_model"] = best_name
+        results["seasonal_naive"] = {
+            "CV_WAPE (%)": round(baseline_wape_value, 2)
+        }
 
-            model_path = os.path.join(MODEL_DIR, f"{name}_model.pkl")
-            joblib.dump(final_model, model_path)
-            logger.info(f"{name} saved → {model_path}")
-
-            improvement = b_wape - cv_wape
-            tag = "BETTER [+]" if improvement > 0 else "WORSE [-]"
-            print(f"  Baseline WAPE (Seasonal Naive) : {b_wape:.2f}%")
-            print(f"  Model WAPE    (full-data fit)  : {model_wape:.2f}%")
-            print(f"  CV WAPE       (rolling-origin) : {cv_wape:.2f}%")
-            print(f"  Improvement vs Baseline (CV)  : {improvement:+.2f}%  [{tag}]")
-            print("=" * 78)
-
-        # Best model by lowest CV WAPE
-        best = min(results, key=lambda m: results[m]["CV_WAPE (%)"])
-        logger.info(f"Best model: {best.upper()} (CV WAPE = {results[best]['CV_WAPE (%)']:.2f}%)")
-
-        best_model = joblib.load(os.path.join(MODEL_DIR, f"{best}_model.pkl"))
-        joblib.dump(best_model, os.path.join(MODEL_DIR, "best_model.pkl"))
-        logger.info("best_model.pkl saved.")
-
-        results["best_model"] = best
-        metrics_path = os.path.join(MODEL_DIR, "model_metrics.json")
-        with open(metrics_path, "w") as f:
+        with open(os.path.join(MODEL_DIR, "model_metrics.json"), "w", encoding="utf-8") as f:
             json.dump(results, f, indent=4)
-        logger.info(f"Metrics saved → {metrics_path}")
 
+        logger.info("Best production model: %s", best_name)
+        logger.info("Metrics saved to model_metrics.json")
         return results
 
 
-def print_final_proof(results):
-    """Final comparison table: Seasonal Naive vs all models."""
-    best        = results["best_model"]
-    b_wape      = results[best]["Baseline_WAPE (%)"]
-    model_names = [k for k in results if k != "best_model"]
-
-    print("\n")
-    print("=" * 78)
-    print("  FINAL PROOF — Seasonal Naive Baseline vs ML Models (Rolling-Origin CV)")
-    print("=" * 78)
-    print(f"  {'Model':<20} {'WAPE (%)':>10} {'CV WAPE (%)':>13} {'vs Baseline':>13}  {'Fold WAPEs'}")
-    print("-" * 78)
-    print(f"  {'Seasonal Naive':<20} {b_wape:>9.2f}%  {'—':>12}  {'—':>12}")
-    print("-" * 78)
-
-    for name in model_names:
-        m           = results[name]
-        model_wape  = m["WAPE (%)"]
-        cv_wape     = m["CV_WAPE (%)"]
-        improvement = b_wape - cv_wape
-        tag         = "BETTER [+]" if improvement > 0 else "WORSE [-]"
-        marker      = " << BEST" if name == best else ""
-        fold_str    = ", ".join(f"{w:.2f}%" for w in m.get("Fold_WAPEs", []))
-        print(f"  {name.upper():<20} {model_wape:>9.2f}%  {cv_wape:>12.2f}%  {improvement:>+12.2f}%  {tag}{marker}")
-        print(f"  {'':20}  Fold WAPEs: {fold_str}")
-
-    print("=" * 78)
-    print(f"  Best Model Selected : {best.upper()}  (lowest CV WAPE)")
-    print(f"  Baseline WAPE       : {b_wape:.2f}%")
-    print(f"  Best Model CV WAPE  : {results[best]['CV_WAPE (%)']:.2f}%")
-    print(f"  Improvement         : " f"{results[best]['WAPE_Improvement']:+.2f}%")
-    print("=" * 78)
+def main():
+    weekly = prepare_weekly_data()
+    trainer = ModelTrainer(weekly)
+    results = trainer.train()
+    print("\n" + "=" * 70)
+    print("WEEKLY SKU-LEVEL MODEL RESULTS")
+    print("=" * 70)
+    print(json.dumps(results, indent=4))
 
 
 if __name__ == "__main__":
-    loader   = DataLoader()
-    datasets = loader.load_all()
-    preprocessor = DataPreprocessor(datasets)
-    processed    = preprocessor.process()
-    engineer = FeatureEngineering(processed)
-    final_df = engineer.build_features()
-    trainer = ModelTrainer(final_df)
-    results = trainer.train()
-
-    print_final_proof(results)
-    print("\nTraining Complete.")
-    print(f"Best Model : {results['best_model'].upper()}")
+    main()

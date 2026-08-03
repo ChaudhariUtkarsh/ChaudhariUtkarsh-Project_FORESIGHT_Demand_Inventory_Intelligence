@@ -1,27 +1,23 @@
-pandas==2.2.3                  # Data Manipulation
-numpy==2.2.0                   
+pandas==2.2.3
+numpy==2.2.0
 
-matplotlib==3.10.0             # Data Visualization
+matplotlib==3.10.0
 seaborn==0.13.2
-plotly==6.0.0                  
+plotly==6.0.0
 
-scikit-learn==1.6.1            # Machine Learning
-joblib==1.4.2                  
+scikit-learn==1.6.1
+joblib==1.4.2
 
-streamlit==1.44.1              # Dashboard           
+streamlit==1.44.1
 
-jupyter==1.1.1                 # Notebook
-notebook==7.3.2
+openpyxl==3.1.5
 
-openpyxl==3.1.5                # Excel Support
-
-lightgbm==4.6.0                # Time Series Forecasting
+lightgbm==4.6.0
 xgboost==2.1.4
 statsmodels==0.14.4
 
-prophet==1.1.6                 # Utilities
 requests==2.32.3
 
-fastapi==0.115.0               # REST API
+fastapi==0.115.0
 uvicorn==0.30.6
 pydantic==2.7.4

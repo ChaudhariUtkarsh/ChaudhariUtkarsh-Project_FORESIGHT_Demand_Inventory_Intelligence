@@ -1,284 +1,157 @@
-import streamlit as st
-import pandas as pd
-import numpy as np
-import joblib
 import os
+import sys
+import pandas as pd
+import streamlit as st
 import plotly.graph_objects as go
 
-# Page Configuration
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+from src.predict import DemandPredictor
+
+
 st.set_page_config(page_title="Demand Forecast", page_icon=" ", layout="wide")
-
-
-# Title
-st.title("Demand Forecast")
-st.markdown("Predict future product demand using the trained Machine Learning model.")
+st.title("Weekly Demand Forecast")
+st.markdown("SKU-level demand forecast for the next **6-8 weeks**.")
 st.markdown("---")
 
+@st.cache_resource
+def load_predictor():
+    return DemandPredictor()
 
-# Sidebar
+try:
+    predictor = load_predictor()
+except Exception as exc:
+    st.error(str(exc))
+    st.stop()
+
+
+@st.cache_data
+def load_weekly_history():
+    path = os.path.join(PROJECT_ROOT, "data", "processed", "weekly_model_data.csv")
+    if not os.path.exists(path):
+        return pd.DataFrame()
+    df = pd.read_csv(path)
+    df["week_start"] = pd.to_datetime(df["week_start"])
+    return df
+
+
+history = load_weekly_history()
+if history.empty:
+    st.warning("Weekly model data is not available. Run `python src/train_model.py` first.")
+    st.stop()
+
+skus = sorted(history["sku_id"].astype(str).unique())
+
 st.sidebar.header("Forecast Settings")
-forecast_days = st.sidebar.slider("Forecast Horizon (Days)", min_value=1, max_value=30, value=7)
-st.sidebar.markdown("---")
+sku_id = st.sidebar.selectbox("Select SKU", skus)
+forecast_weeks = st.sidebar.slider("Forecast Horizon (Weeks)", min_value=6, max_value=8, value=6, step=1,)
+st.sidebar.info("Zidio scope: weekly SKU-level forecasting over a defined horizon (e.g. 6–8 weeks).")
 
-
-# Model Paths
-MODEL_PATH = "models/best_model.pkl"
-ENCODER_PATH = "models/label_encoder.pkl"
-
-
-# Load Model
-@st.cache_resource
-def load_model():
-    if not os.path.exists(MODEL_PATH):
-        st.error("best_model.pkl not found.")
-        st.stop()
-    return joblib.load(MODEL_PATH)
-
-
-# Load Encoder
-@st.cache_resource
-def load_encoder():
-    if os.path.exists(ENCODER_PATH):
-        return joblib.load(ENCODER_PATH)
-    return None
-
-model = load_model()
-encoder = load_encoder()
-
-
-# Prediction Form
-st.header("Prediction Input")
-with st.form("forecast_form"):
-    sku_id = st.text_input("SKU ID", value="SKU001")
-    year = st.number_input("Year", min_value=2024, max_value=2035, value=2026)
-    month = st.slider("Month", 1, 12, 7)
-    week = st.slider("Week", 1, 53, 30)
-    day = st.slider( "Day", 1, 31, 15)
-    day_of_week = st.selectbox("Day of Week", [ 0, 1, 2, 3, 4, 5, 6])
-    quarter = st.selectbox("Quarter", [1, 2, 3, 4])
-    is_weekend = st.selectbox("Weekend", [0, 1])
-    lag_1 = st.number_input("Lag 1 Sales", value=100)
-    lag_7 = st.number_input("Lag 7 Sales", value=95)
-    lag_14 = st.number_input( "Lag 14 Sales", value=90)
-    rolling_mean_7 = st.number_input("Rolling Mean (7)", value=100.0)
-    rolling_std_7 = st.number_input( "Rolling Std (7)", value=8.5)
-    rolling_mean_30 = st.number_input( "Rolling Mean (30)", value=98.0)
-    price_difference = st.number_input("Price Difference", value=10.0)
-    discount_percentage = st.number_input("Discount %", value=5.0)
-    inventory_gap = st.number_input("Inventory Gap", value=20)
-    total_inventory = st.number_input("Total Inventory", value=500)
-    on_hand_units = st.number_input("On Hand Units", value=300)
-    on_order_units = st.number_input("On Order Units", value=100)
-    reorder_point = st.number_input("Reorder Point", value=80)
-    submitted = st.form_submit_button("Predict Demand")
-
-
-# Prediction Logic
-if submitted:
+if st.button("Generate Weekly Forecast", type="primary"):
     try:
-        # Encode SKU
-        if encoder is not None:
-            try:
-                sku_id_enc = encoder.transform([sku_id])[0]
-            except:
-                sku_id_enc = 0
-        else:
-            sku_id_enc = 0
+        result = predictor.forecast(sku_id, forecast_weeks)
+        forecast_df = pd.DataFrame(result["forecast"])
+        st.session_state["forecast_result"] = result
+        st.session_state["forecast_df"] = forecast_df
+    except Exception as exc:
+        st.error(f"Forecast failed: {exc}")
 
-        # Create Input DataFrame
-        input_df = pd.DataFrame({
-            "year":[year],
-            "month":[month],
-            "week":[week],
-            "day":[day],
-            "day_of_week":[day_of_week],
-            "quarter":[quarter],
-            "is_weekend":[is_weekend],
+if "forecast_df" not in st.session_state:
+    st.info("Select an SKU and click **Generate Weekly Forecast**.")
+    st.stop()
 
-            "lag_1":[lag_1],
-            "lag_7":[lag_7],
-            "lag_14":[lag_14],
+forecast_df = st.session_state["forecast_df"]
+result = st.session_state["forecast_result"]
+st.success(f"Weekly forecast generated for {sku_id}.")
+c1, c2, c3, c4 = st.columns(4)
+with c1:
+    st.metric("Forecast Horizon", f"{forecast_weeks} Weeks")
+with c2:
+    st.metric("Total Forecast", f"{result['total_forecast_units']:,.0f} Units")
+with c3:
+    st.metric("Avg Weekly Demand", f"{forecast_df['predicted_demand'].mean():,.1f} Units")
+with c4:
+    st.metric("Peak Week", f"{forecast_df['predicted_demand'].max():,.1f} Units")
 
-            "rolling_mean_7":[rolling_mean_7],
-            "rolling_std_7":[rolling_std_7],
-            "rolling_mean_30":[rolling_mean_30],
-
-            "price_difference":[price_difference],
-            "discount_percentage":[discount_percentage],
-
-            "inventory_gap":[inventory_gap],
-            "total_inventory":[total_inventory],
-
-            "on_hand_units":[on_hand_units],
-            "on_order_units":[on_order_units],
-            "reorder_point":[reorder_point],
-
-            "sku_id_enc":[sku_id_enc]
-        })
-
-        # Prediction
-        prediction = model.predict(input_df)[0]
-
-        if prediction < 0:
-            prediction = 0
-
-        prediction = round(float(prediction),2)
-        st.markdown("---")
-        st.success("Prediction Completed Successfully")
-
-
-        # KPI Cards
-        c1,c2,c3 = st.columns(3)
-
-        with c1:
-            st.metric("Forecast Units", prediction)
-
-        with c2:
-            expected_revenue = prediction * 100
-            st.metric("Expected Revenue", f"{expected_revenue:,.2f}")
-
-        with c3:
-            if prediction > reorder_point:
-                risk = "High"
-            elif prediction > reorder_point*0.70:
-                risk = "Medium"
-            else:
-                risk = "Low"
-            st.metric("Risk Level", risk)
-        st.markdown("---")
-
- 
-        # Forecast Summary
-        summary = pd.DataFrame({"SKU":[sku_id], "Forecast Units":[prediction], "Forecast Days":[forecast_days], "Risk":[risk]})
-        st.subheader("Forecast Summary")
-        st.dataframe(summary, use_container_width=True)
-
-
-        # Forecast Chart
-        chart = pd.DataFrame({"Day":list(range(1,forecast_days+1)), "Forecast":[prediction]*forecast_days})
-        fig = go.Figure(go.Scatter(x=chart["Day"], y=chart["Forecast"], mode="lines+markers", name="Forecast"))
-        fig.update_layout(title="Forecast Trend", xaxis_title="Day", yaxis_title="Units")
-        st.plotly_chart(fig, use_container_width=True)
-
-
-        # Forecast Bar Chart
-        fig2 = go.Figure(go.Bar(x=summary["SKU"], y=summary["Forecast Units"], text=summary["Forecast Units"], textposition="auto"))
-        fig2.update_layout(title="Forecast by SKU")
-        st.plotly_chart(fig2, use_container_width=True)
-
-    except Exception as e:
-        st.error(e)
-
-
-
-# Download Forecast CSV
 st.markdown("---")
-st.header("Download Forecast")
-forecast_download = summary.copy()
-csv = forecast_download.to_csv(index=False).encode("utf-8")
-st.download_button(label="Download Forecast CSV", data=csv, file_name="forecast_prediction.csv", mime="text/csv")
+st.subheader("Weekly SKU-Level Forecast")
+show_df = forecast_df[[
+    "sku_id", "forecast_week", "week_start",
+    "predicted_demand", "lower_bound_80", "upper_bound_80"
+]].copy()
+show_df.columns = [
+    "SKU", "Forecast Week", "Week Start",
+    "Forecast Units", "80% Lower", "80% Upper"
+]
+st.dataframe(show_df, use_container_width=True, hide_index=True)
 
+st.subheader("Forecast with 80% Prediction Interval")
+fig = go.Figure()
+fig.add_trace(go.Scatter(
+    x=forecast_df["week_start"],
+    y=forecast_df["upper_bound_80"],
+    mode="lines",
+    line=dict(width=0),
+    showlegend=False,
+    hoverinfo="skip",
+))
+fig.add_trace(go.Scatter(
+    x=forecast_df["week_start"],
+    y=forecast_df["lower_bound_80"],
+    mode="lines",
+    line=dict(width=0),
+    fill="tonexty",
+    name="80% interval",
+))
+fig.add_trace(go.Scatter(
+    x=forecast_df["week_start"],
+    y=forecast_df["predicted_demand"],
+    mode="lines+markers",
+    name="Weekly Forecast",
+))
+fig.update_layout(
+    title=f"{sku_id} — {forecast_weeks}-Week Demand Forecast",
+    xaxis_title="Week",
+    yaxis_title="Units",
+    hovermode="x unified",
+)
+st.plotly_chart(fig, use_container_width=True)
 
-# Forecast Report
-report = f"""
--------------------------------------------
+st.subheader("Forecast vs Available Inventory")
+forecast_total = float(forecast_df["predicted_demand"].sum())
+on_hand = float(forecast_df["on_hand_units"].iloc[0])
+on_order = float(forecast_df["on_order_units"].iloc[0])
+available = on_hand + on_order
 
-PROJECT FORESIGHT
-Demand Forecast Report
+inv_col1, inv_col2, inv_col3, inv_col4 = st.columns(4)
+with inv_col1:
+    st.metric("On Hand", f"{on_hand:,.0f}")
+with inv_col2:
+    st.metric("On Order", f"{on_order:,.0f}")
+with inv_col3:
+    st.metric("Available", f"{available:,.0f}")
+with inv_col4:
+    st.metric("6–8 Week Demand", f"{forecast_total:,.0f}")
 
--------------------------------------------
-
-SKU ID : {sku_id}
-Forecast Units : {prediction}
-Forecast Horizon : {forecast_days} Days
-Expected Revenue : {expected_revenue:,.2f}
-Risk Level : {risk}
-
--------------------------------------------
-
-Recommendation
-"""
-
-if risk == "High":
-    report += """
-        1. Increase Inventory
-        2. Place Reorder Immediately
-        3. Increase Safety Stock
-    """
-
-elif risk == "Medium":
-    report += """
-        1. Monitor Inventory
-        2. Review Weekly Forecast
-        3. Keep Current Reorder Policy
-    """
-
+if forecast_total > available:
+    st.error("Forecast demand is above current available inventory — review replenishment.")
+elif available > forecast_total * 1.5:
+    st.warning("Inventory is materially above forecast demand — review overstock risk.")
 else:
-    report += """
-        1. Inventory is Healthy
-        2. No Immediate Action Required
-    """
+    st.success("Inventory position is broadly aligned with forecast demand.")
 
-report += """
--------------------------------------------
-Generated by Project FORESIGHT
--------------------------------------------
-"""
-
-st.download_button(label="Download Forecast Report", data=report, file_name="Forecast_Report.txt", mime="text/plain")
-
-
-# Business Recommendation
 st.markdown("---")
-st.header("Business Recommendation")
+st.subheader("Download Forecast")
+csv = forecast_df.to_csv(index=False).encode("utf-8")
+st.download_button("Download Weekly Forecast CSV", data=csv, file_name=f"{sku_id}_weekly_forecast_{forecast_weeks}w.csv", mime="text/csv",)
 
-if risk == "High":
-    st.error("""
-        High Demand Expected Recommended Action
-        1. Increase Procurement
-        2. Increase Safety Stock
-        3. Inform Supply Chain Team
-        4. Monitor Daily Sales
-    """)
+report = f"""PROJECT FORESIGHT — Weekly Demand Forecast\n\nSKU: {sku_id}\nForecast Horizon: {forecast_weeks} weeks\nTotal Forecast Demand: {forecast_total:,.2f} units\nOn Hand: {on_hand:,.2f}\nOn Order: {on_order:,.2f}\nAvailable Inventory: {available:,.2f}\n\nZidio alignment:\n- Weekly SKU-level forecast\n- 6–8 week defined horizon\n- 80% forecast interval\n\nGenerated by Project FORESIGHT\n"""
 
-elif risk == "Medium":
-    st.warning("""
-        Moderate Demand Expected Recommended Action
-        1. Weekly Monitoring
-        2. Continue Normal Procurement
-        3. Review Inventory Weekly
-    """)
+st.download_button(
+    "Download Forecast Report",
+    data=report, file_name=f"{sku_id}_weekly_forecast_report.txt", mime="text/plain",)
 
-else:
-    st.success("""
-        Demand is Stable Recommended Action
-        1. Maintain Current Inventory
-        2. No Immediate Procurement Required
-    """)
-
-
-# Forecast History
 st.markdown("---")
-st.header("Forecast History")
-history = pd.DataFrame({"SKU":[sku_id], "Forecast":[prediction], "Revenue":[expected_revenue], "Risk":[risk]})
-st.dataframe(history, use_container_width=True)
-
-
-# Business Insights
-st.markdown("---")
-st.header("Business Insights")
-col1,col2,col3 = st.columns(3)
-
-with col1:
-    st.metric("Forecast", prediction)
-
-with col2:
-    st.metric("Revenue", f"{expected_revenue:,.2f}")
-
-with col3:
-    st.metric("Risk", risk)
-
-
-# Footer
-st.markdown("---")
-st.caption("Project FORESIGHT | AI-Powered Demand Forecasting & Inventory Intelligence")
+st.caption("Project FORESIGHT | Weekly SKU-Level Demand Forecasting")

@@ -1,90 +1,186 @@
-
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from src.predict import DemandPredictor
+import os
 
-#App
+
+# FASTAPI APPLICATION
 app = FastAPI(
     title="Project FORESIGHT API",
-    description="Retail Demand Forecasting — SKU-level prediction endpoint",
-    version="1.0"
+    description=("Weekly SKU-level Demand Forecasting " "and Inventory Intelligence API"), version="3.0"
 )
 
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-#Load predictor once at startup
+# CORS
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+
+
+# LOAD MODEL
 try:
     predictor = DemandPredictor()
-except FileNotFoundError as e:
+    print("SUCCESS: DemandPredictor loaded successfully.")
+
+except Exception as exc:
     predictor = None
-    print(f"WARNING: {e} — run train_model.py first.")
+    print(f"WARNING: DemandPredictor could not be loaded: {exc}")
 
 
-#Request Schema
+# REQUEST MODELS
 class PredictRequest(BaseModel):
-    sku_id:              str   = "SKU001"
-    year:                int   = 2025
-    month:               int   = 7
-    week:                int   = 30
-    day:                 int   = 15
-    day_of_week:         int   = 2
-    quarter:             int   = 3
-    is_weekend:          int   = 0
-    lag_1:               float = 100.0
-    lag_7:               float = 95.0
-    lag_14:              float = 90.0
-    rolling_mean_7:      float = 100.0
-    rolling_std_7:       float = 8.5
-    rolling_mean_30:     float = 98.0
-    price_difference:    float = 10.0
-    discount_percentage: float = 5.0
-    inventory_gap:       float = 20.0
-    total_inventory:     float = 500.0
-    on_hand_units:       float = 300.0
-    on_order_units:      float = 100.0
-    reorder_point:       float = 80.0
+    sku_id: str = Field("101", description="SKU identifier", examples=["101"])
+    forecast_weeks: int = Field(6, ge=6, le=8, description="Forecast horizon: 6-8 weeks", examples=[6])
 
 
-#Response Schema
-class PredictResponse(BaseModel):
-    sku_id:           str
-    forecast_units:   float
-    risk_level:       str
-    recommendation:   str
+class ScoreRequest(BaseModel):
+    sku_id: str = Field(..., description="SKU identifier")
+    forecast_weeks: int = Field(default=6, ge=6, le=8, description="Forecast horizon: 6-8 weeks")
+    lead_time_weeks: int = Field(default=1, ge=1, le=8, description="Supplier lead time in weeks")
 
 
-#Helpers
-def get_risk(forecast: float, reorder_point: float) -> tuple[str, str]:
-    ratio = forecast / max(reorder_point, 1)
-    if ratio >= 1.5:
-        return "High",   "Reorder Inventory Immediately"
-    elif ratio >= 0.9:
-        return "Medium", "Run Discount / Promotion"
-    else:
-        return "Low",    "Inventory Level is Healthy"
-
-
-#Routes 
+# ROOT ENDPOINT
 @app.get("/")
 def root():
-    return {"project": "Project FORESIGHT", "version": "1.0", "status":  "running", "docs":    "/docs"}
-
-
-@app.get("/health")
-def health():
     return {
-        "status":       "ok",
-        "model_loaded": predictor is not None
+        "project": "Project FORESIGHT",
+        "version": "3.0",
+        "service": "Demand Forecasting & Inventory Intelligence",
+        "forecast_grain": "weekly SKU-level",
+        "forecast_horizon": "6-8 weeks",
+        "status": "running",
+        "health": "/health",
+        "docs": "/docs",
+        "prediction_endpoint": "/predict",
+        "scoring_endpoint": "/score"
     }
 
 
-@app.post("/predict", response_model=PredictResponse)
+# HEALTH CHECK
+@app.get("/health")
+def health():
+    model_status = ("loaded" if predictor is not None else "not_loaded")
+    return {"status": "healthy", "service": "Project FORESIGHT Scoring API", "model_status": model_status}
+
+
+# HELPER FUNCTION
+def calculate_risk(forecast, lead_time_weeks=1):
+
+    if not forecast:
+        return {"risk_level": "Unknown", "risk_score": 0, "recommendation": "No forecast data available"}
+    total_forecast = sum(float( week.get( "predicted_demand",  0 ) )for week in forecast )
+    lead_time_demand = sum(float(week.get("predicted_demand", 0))for week in forecast[:lead_time_weeks])
+    first_week = forecast[0]
+    on_hand = float(first_week.get("on_hand_units", 0))
+    on_order = float(first_week.get("on_order_units", 0))
+    available_inventory = (on_hand + on_order)
+    stockout_gap = max(lead_time_demand - available_inventory, 0)
+    forward_demand = total_forecast
+    excess_inventory = max(on_hand - forward_demand, 0)
+
+
+    if stockout_gap > 0:
+        risk_level = "High Stockout"
+        risk_score = min(100, int((stockout_gap / max(lead_time_demand, 1)) * 100))
+        recommendation = ("Review replenishment immediately")
+
+
+    elif (forward_demand > 0 and on_hand > forward_demand * 1.5):
+        risk_level = "High Overstock"
+        risk_score = min(100, int((excess_inventory / max(on_hand, 1)) * 100))
+        recommendation = ("Review markdown / clearance")
+
+
+    else:
+        risk_level = "Healthy"
+        risk_score = 10
+        recommendation = ("Continue weekly monitoring")
+
+
+    return {
+        "risk_level": risk_level,
+        "risk_score": risk_score,
+        "lead_time_demand": round(lead_time_demand, 2),
+        "available_inventory": round(available_inventory, 2),
+        "stockout_gap_units": round(stockout_gap, 2),
+        "forward_window_demand": round(forward_demand, 2),
+        "excess_inventory_units": round(excess_inventory, 2),
+        "recommendation": recommendation
+    }
+
+
+# PREDICTION ENDPOINT
+@app.post("/predict")
 def predict(request: PredictRequest):
     if predictor is None:
-        raise HTTPException(status_code=503, detail="Model not loaded.")
-    data = request.model_dump()
-    forecast_result = predictor.predict(data)
-    predicted_demand = forecast_result["predicted_demand"]
-    risk, recommendation = get_risk(predicted_demand, request.reorder_point)
-    return PredictResponse(sku_id=request.sku_id, forecast_units=predicted_demand, risk_level=risk, recommendation=recommendation)
+        raise HTTPException(status_code=503, detail=("Prediction model is not loaded. " "Run src/train_model.py first."))
+
+
+    try:
+        result = predictor.forecast(request.sku_id, request.forecast_weeks)
+        risk_result = calculate_risk(result["forecast"], lead_time_weeks=1)
+
+
+        return {
+            "status": "success",
+            "sku_id": result["sku_id"],
+            "forecast_horizon_weeks": result["forecast_horizon_weeks"],
+            "total_forecast_units": result["total_forecast_units"],
+            "forecast": result["forecast"],
+            "risk_level": risk_result["risk_level"],
+            "risk_score": risk_result["risk_score"],
+            "recommendation": risk_result["recommendation"]
+        }
+
+
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+    except Exception as exc:
+        raise HTTPException(status_code=500,detail=str(exc))
+
+
+# SCORING ENDPOINT
+@app.post("/score")
+def score(request: ScoreRequest):
+
+    if predictor is None:
+        raise HTTPException(status_code=503, detail=("Prediction model is not loaded. " "Run src/train_model.py first."))
+
+
+    try:
+        result = predictor.forecast(request.sku_id, request.forecast_weeks)
+        risk_result = calculate_risk(result["forecast"], lead_time_weeks=request.lead_time_weeks)
+        return {
+
+            "status": "success",
+            "service": ("Project FORESIGHT " "Inventory Scoring Service"),
+            "sku_id": result["sku_id"],
+            "forecast_horizon_weeks": result["forecast_horizon_weeks"],
+            "total_forecast_units": round(float(result["total_forecast_units"]), 2),
+            "lead_time_weeks": (request.lead_time_weeks),
+            "risk_level": risk_result["risk_level"],
+            "risk_score": risk_result["risk_score"],
+            "lead_time_demand": risk_result["lead_time_demand"],
+            "available_inventory": risk_result["available_inventory"],
+            "stockout_gap_units": risk_result["stockout_gap_units"],
+            "forward_window_demand": risk_result["forward_window_demand"],
+            "excess_inventory_units": risk_result["excess_inventory_units"],
+            "recommendation": risk_result["recommendation"],
+            "forecast": result["forecast"]
+        }
+
+
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# RUN LOCALLY
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("api:app", host="0.0.0.0", port=port, reload=False)

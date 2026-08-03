@@ -1,14 +1,19 @@
 import streamlit as st
+import os
 
+
+# PAGE CONFIGURATION
+st.set_page_config(page_title="About | Project FORESIGHT", page_icon=" ", layout="wide")
+
+
+# LOAD CSS
 def load_css():
-    with open("style.css") as f:
+    css_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "style.css")
+
+    with open(css_path, "r", encoding="utf-8") as f:
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 load_css()
-
-
-# Page Configuration
-st.set_page_config(page_title="About Project", page_icon=" ", layout="wide")
 
 
 # Header

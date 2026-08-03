@@ -1,57 +1,36 @@
 {
     "xgboost": {
-        "MAE": 5.5297,
-        "RMSE": 7.0198,
-        "R2 Score": 0.1361,
-        "MAPE (%)": 21.06,
-        "WAPE (%)": 19.76,
-        "CV_WAPE (%)": 21.82,
-        "Baseline_WAPE (%)": 29.85,
-        "WAPE_Improvement": 8.02,
-        "Rolling_Origin_Folds": [
-            21.841041618612874,
-            21.988304909711527,
-            21.701865193202536,
-            22.0160597881393,
-            21.555783781754513
-        ],
+        "CV_WAPE (%)": 40.48,
+        "Baseline_WAPE (%)": 53.6,
+        "WAPE_Improvement": 13.12,
         "Fold_WAPEs": [
-            21.841041618612874,
-            21.988304909711527,
-            21.701865193202536,
-            22.0160597881393,
-            21.555783781754513
+            40.0,
+            39.56,
+            39.19,
+            39.15,
+            44.49
         ],
+        "Prediction_Interval_Margin": 59.4703,
         "Uncertainty_Level": "80%",
-        "Residual_STD": 7.0198,
-        "Prediction_Interval_Margin": 8.9966
+        "Residual_STD": 46.4032
     },
     "lightgbm": {
-        "MAE": 5.6844,
-        "RMSE": 7.2053,
-        "R2 Score": 0.0898,
-        "MAPE (%)": 21.63,
-        "WAPE (%)": 20.31,
-        "CV_WAPE (%)": 21.69,
-        "Baseline_WAPE (%)": 29.85,
-        "WAPE_Improvement": 8.16,
-        "Rolling_Origin_Folds": [
-            21.615433192689277,
-            21.91945068580004,
-            21.59076777881651,
-            21.8272330783778,
-            21.487688241331696
-        ],
+        "CV_WAPE (%)": 40.4,
+        "Baseline_WAPE (%)": 53.6,
+        "WAPE_Improvement": 13.2,
         "Fold_WAPEs": [
-            21.615433192689277,
-            21.91945068580004,
-            21.59076777881651,
-            21.8272330783778,
-            21.487688241331696
+            40.27,
+            39.36,
+            39.11,
+            39.02,
+            44.26
         ],
+        "Prediction_Interval_Margin": 69.3811,
         "Uncertainty_Level": "80%",
-        "Residual_STD": 7.2053,
-        "Prediction_Interval_Margin": 9.2344
+        "Residual_STD": 54.1363
     },
-    "best_model": "lightgbm"
+    "best_model": "lightgbm",
+    "seasonal_naive": {
+        "CV_WAPE (%)": 53.6
+    }
 }

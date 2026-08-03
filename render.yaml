@@ -1,8 +1,7 @@
 services:
-
-* type: web
-  name: project-foresight-api
-  runtime: python
-  plan: free
-  buildCommand: pip install -r requirements.txt
-  startCommand: python -m uvicorn api:app --host 0.0.0.0 --port $PORT
+  - type: web
+    name: project-foresight-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn api:app --host 0.0.0.0 --port $PORT

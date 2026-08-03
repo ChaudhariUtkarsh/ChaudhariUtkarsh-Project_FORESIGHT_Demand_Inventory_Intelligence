@@ -8,8 +8,8 @@ The system uses historical sales, product, calendar, pricing, and inventory data
 
 * Forecast future product demand.
 * Identify stockout and overstock risks at SKU level.
-* Estimate ₹ Sales at Risk.
-* Estimate ₹ Capital Locked in inventory.
+* Estimate Sales at Risk.
+* Estimate Capital Locked in inventory.
 * Provide actionable inventory recommendations.
 * Support decision-making through a Streamlit dashboard.
 * Provide forecasting/scoring functionality through a FastAPI service.
@@ -45,7 +45,15 @@ After preprocessing and feature engineering:
 data/processed/processed_data.csv
 ```
 
-The processed dataset is used for model training, risk analysis and forecasting.
+The processed dataset is used as the source for weekly SKU-level model preparation, risk analysis and forecasting.
+
+The training pipeline additionally creates:
+
+```text
+data/processed/weekly_model_data.csv
+```
+
+This dataset has one row per SKU per week and uses `weekly_units_sold` as the forecasting target.
 
 ---
 
@@ -92,16 +100,16 @@ python src\train_model.py
 
 This performs:
 
-1. Dataset validation.
-2. Data preprocessing.
-3. Feature engineering.
-4. Rolling-Origin Cross-Validation.
-5. XGBoost training.
-6. LightGBM training.
-7. Model evaluation.
-8. Best model selection.
-9. 80% forecast uncertainty calculation.
-10. Model artifact and metrics saving.
+1. Builds a clean SKU/day table from the processed extract.
+2. Aggregates daily `units_sold` to weekly SKU-level demand.
+3. Creates leakage-safe weekly lag and rolling features.
+4. Builds the seasonal-naive weekly baseline.
+5. Runs rolling-origin cross-validation.
+6. Trains XGBoost and LightGBM.
+7. Compares model WAPE against the baseline.
+8. Selects the lowest-CV-WAPE production model (or the baseline if ML does not win).
+9. Calculates an 80% forecast interval.
+10. Saves the weekly dataset, model artifacts, metadata and metrics.
 
 ---
 
@@ -139,8 +147,8 @@ The risk analysis calculates:
 * Risk Level
 * Primary Risk
 * Recommended Action
-* ₹ Sales at Risk
-* ₹ Capital Locked
+* Sales at Risk
+* Capital Locked
 
 Output:
 
@@ -161,8 +169,8 @@ python src\business_insights.py
 This generates:
 
 * Top 10 risky SKUs
-* Total ₹ Sales at Risk
-* Total ₹ Capital Locked
+* Total Sales at Risk
+* Total Capital Locked
 * Risk distribution
 
 Output:
@@ -198,57 +206,68 @@ data/decisioning_grid/decisioning_grid.csv
 
 ## 5. Model
 
-Project FORESIGHT evaluates two machine learning models:
+Project FORESIGHT now forecasts at **weekly SKU level**, aligned with the Zidio engagement brief.
 
-### XGBoost
-
-```text
-XGBRegressor
-```
-
-### LightGBM
+### Forecast grain
 
 ```text
-LGBMRegressor
+Daily units_sold
+        ↓
+SKU + Week aggregation
+        ↓
+weekly_units_sold
+        ↓
+Weekly lag / rolling features
+        ↓
+XGBoost / LightGBM
 ```
 
-Models are evaluated using **date-based Rolling-Origin Cross-Validation** to simulate forecasting on future time periods while avoiding future-data leakage.
+### Forecast horizon
 
-The final selected model is:
+The dashboard and predictor support a defined **6–8 week** forecast horizon.
 
-```text
-LightGBM
-```
+### Baseline
 
-because it achieved the lowest Rolling-Origin CV WAPE.
+The project uses a **weekly seasonal-naive baseline with a 4-week seasonal lag**. The supplied dataset contains approximately one year of history, so a 52-week annual lag does not provide enough prior-year observations for a fair rolling backtest.
+
+### Models
+
+* XGBoost (`XGBRegressor`)
+* LightGBM (`LGBMRegressor`)
+
+Models are evaluated using **rolling-origin cross-validation**. Features are constructed from prior observations so future target information does not enter the model features.
 
 ---
 
 ## 6. WAPE vs Baseline
 
-The project uses **Seasonal Naive (7-day lag)** as the baseline forecasting method.
+The current weekly backtest results generated from the supplied project data are:
 
-### Final Comparison
+| Model | Rolling-Origin CV WAPE |
+| --- | ---: |
+| Seasonal Naive Baseline | **53.60%** |
+| XGBoost | **40.31%** |
+| LightGBM | **40.40%** |
 
-| Model                      | WAPE / CV WAPE |
-| -------------------------- | -------------: |
-| Seasonal Naive Baseline    |         29.85% |
-| XGBoost Rolling-Origin CV  |         21.82% |
-| LightGBM Rolling-Origin CV |     **21.69%** |
-
-### Improvement
-
-LightGBM achieved:
+### Selected model
 
 ```text
-Baseline WAPE      = 29.85%
-LightGBM CV WAPE   = 21.69%
-Improvement        = 8.16 percentage points
+Best model: XGBoost
 ```
 
-Therefore, the selected LightGBM model improves forecasting performance by **8.16 percentage points** compared with the Seasonal Naive baseline.
+XGBoost improves WAPE by **13.29 percentage points** versus the seasonal-naive baseline on rolling-origin cross-validation.
 
-> Note: The 20.31% value is the full-data fit WAPE and is not used for the baseline comparison. The baseline comparison uses the Rolling-Origin CV WAPE of 21.69%.
+These values are saved in:
+
+```text
+models/model_metrics.json
+```
+
+The model metadata is saved in:
+
+```text
+models/model_metadata.json
+```
 
 ---
 
@@ -305,12 +324,12 @@ DOS < 30 days       → 0.10
 ### Business Metrics
 
 ```text
-₹ Capital Locked
+Capital Locked
 = Current Inventory × Average Unit Price
 ```
 
 ```text
-₹ Sales at Risk
+Sales at Risk
 = Average Daily Demand
 × Average Unit Price
 × 7

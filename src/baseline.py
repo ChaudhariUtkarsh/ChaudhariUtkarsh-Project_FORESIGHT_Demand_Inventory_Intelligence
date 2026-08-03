@@ -1,80 +1,42 @@
 import pandas as pd
+import numpy as np
+
 
 class SeasonalNaiveBaseline:
-    def __init__(self, season_length=7):
-        """
-        season_length = 7  -> Weekly Seasonality
-        season_length = 30 -> Monthly Seasonality
-        """
-        self.season_length = season_length
+    """Weekly seasonal-naive baseline for SKU-level demand.
 
-    def predict(self, data: pd.DataFrame, date_col="date", target_col="units_sold"):
-        """
-        Parameters
-        ----------
-        data : DataFrame
-        date_col : Date Column
-        target_col : Target Column
+    The Zidio brief requires a seasonal-naive baseline. The supplied
+    project contains roughly one year of history, so a 4-week seasonal
+    lag is used as an operational seasonal reference; a 52-week annual
+    lag would not have enough prior-year observations for a fair backtest.
+    """
 
-        Returns
-        -------
-        DataFrame
-        """
+    def __init__(self, season_length=4):
+        self.season_length = int(season_length)
 
+    def predict(self, data, date_col="week_start", target_col="weekly_units_sold", group_col="sku_id"):
         df = data.copy()
-
-        # Convert to datetime
         df[date_col] = pd.to_datetime(df[date_col])
-
-        # Sort data
-        df = df.sort_values(date_col)
-
-        # Seasonal Naive Forecast
-        df["baseline_forecast"] = df[target_col].shift(self.season_length)
-
-        # Fill first season values
-        df["baseline_forecast"] = (df["baseline_forecast"].fillna(df[target_col].mean()))
-
+        df = df.sort_values([group_col, date_col]).reset_index(drop=True)
+        df["baseline_forecast"] = (
+            df.groupby(group_col)[target_col]
+            .shift(self.season_length)
+        )
+        fallback = df.groupby(group_col)[target_col].transform("mean")
+        df["baseline_forecast"] = df["baseline_forecast"].fillna(fallback).clip(lower=0)
         return df
 
-    def forecast_future(self, history, periods=7):
-        """
-        Forecast future values using last season.
-        """
-
-        history = list(history)
-
+    def forecast_future(self, history, periods=6):
+        history = [max(float(x), 0.0) for x in history]
         if len(history) < self.season_length:
-            raise ValueError("Not enough history for seasonal baseline.")
+            raise ValueError(
+                f"Need at least {self.season_length} weeks of history for seasonal-naive forecasting."
+            )
 
-        future = history[-self.season_length:]
-
-        prediction = []
-
-        while len(prediction) < periods:
-            prediction.extend(future)
-
-        return prediction[:periods]
-
-
-if __name__ == "__main__":
-
-    # Sample Data
-    data = pd.DataFrame({
-        "date": pd.date_range("2025-01-01", periods=30),
-        "units_sold": [
-            10,12,15,18,20,22,25,
-            11,13,16,19,21,23,27,
-            12,14,17,20,22,24,28,
-            13,15,18,21,23,25,29,
-            30,32
-        ]
-    })
-
-    baseline = SeasonalNaiveBaseline(season_length=7)
-    result = baseline.predict(data)
-    print(result.tail(10))
-
-    future = baseline.forecast_future(result["units_sold"], periods=7)
-    print("\nNext 7 Days Forecast")
-    print(future)
+        values = history.copy()
+        predictions = []
+        for _ in range(int(periods)):
+            pred = max(values[-self.season_length], 0.0)
+            predictions.append(pred)
+            values.append(pred)
+        return predictions
