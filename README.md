@@ -246,16 +246,16 @@ The current weekly backtest results generated from the supplied project data are
 | Model | Rolling-Origin CV WAPE |
 | --- | ---: |
 | Seasonal Naive Baseline | **53.60%** |
-| XGBoost | **40.31%** |
+| XGBoost | **40.48%** |
 | LightGBM | **40.40%** |
 
 ### Selected model
 
 ```text
-Best model: XGBoost
+Best model: LightGBM
 ```
 
-XGBoost improves WAPE by **13.29 percentage points** versus the seasonal-naive baseline on rolling-origin cross-validation.
+LightGBM improves WAPE by **13.20 percentage points** versus the seasonal-naive baseline on rolling-origin cross-validation.
 
 These values are saved in:
 
@@ -415,7 +415,7 @@ http://127.0.0.1:8000/docs
 
 * Forecasting target is `units_sold`.
 * Historical sales data is representative of future demand patterns.
-* A 7-day seasonal cycle is used for the Seasonal Naive baseline.
+* A 4-week seasonal lag is used for the weekly Seasonal Naive baseline.
 * Rolling-Origin Cross-Validation is used to evaluate forecasting performance over time.
 * Negative demand predictions are constrained to zero.
 * Days of Supply is calculated using current inventory and average daily demand.
@@ -432,9 +432,15 @@ http://127.0.0.1:8000/docs
 Project_FORESIGHT_Demand_Inventory_Intelligence/
 │
 ├── app/
+│   ├── Home.py
+│   ├── login.py
+│   ├── utils.py
+│   ├── style.css
 │   └── pages/
 │       ├── 1_Dashboard.py
-│       └── 2_Forecast.py
+│       ├── 2_Forecast.py
+│       ├── 3_Risk_Scoring.py
+│       └── 4_About.py
 │
 ├── data/
 │   ├── raw/
@@ -448,7 +454,8 @@ Project_FORESIGHT_Demand_Inventory_Intelligence/
 │   ├── lightgbm_model.pkl
 │   ├── xgboost_model.pkl
 │   ├── label_encoder.pkl
-│   └── model_metrics.json
+│   ├── model_metrics.json
+│   └── model_metadata.json
 │
 ├── reports/
 │
@@ -456,9 +463,11 @@ Project_FORESIGHT_Demand_Inventory_Intelligence/
 │   ├── data_loader.py
 │   ├── preprocessing.py
 │   ├── feature_engineering.py
+│   ├── baseline.py
 │   ├── train_model.py
 │   ├── predict.py
 │   ├── evaluate.py
+│   ├── risk_scoring.py
 │   ├── risk_analysis.py
 │   ├── business_insights.py
 │   └── decisioning_grid.py
@@ -502,6 +511,6 @@ Project FORESIGHT provides an end-to-end demand forecasting and inventory intell
 
 The system combines machine learning forecasting, uncertainty estimation, SKU-level risk scoring, business insights and decisioning recommendations.
 
-The selected LightGBM model achieved a **21.69% Rolling-Origin CV WAPE**, compared with **29.85% for the Seasonal Naive baseline**, resulting in an **8.16 percentage-point improvement** over the baseline.
+The selected LightGBM model achieved a 40.40% Rolling-Origin CV WAPE, compared with 53.60% for the Seasonal Naive baseline, resulting in a 13.20 percentage-point improvement over the baseline.
 
 The solution enables businesses to prioritize high-risk SKUs, monitor ₹ Sales at Risk and ₹ Capital Locked, and make data-driven inventory decisions.

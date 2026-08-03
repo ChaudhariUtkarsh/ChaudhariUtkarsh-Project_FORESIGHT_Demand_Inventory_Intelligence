@@ -1,6 +1,6 @@
 import streamlit as st
 import os
-
+import pandas as pd
 
 # PAGE CONFIGURATION
 st.set_page_config(page_title="Project FORESIGHT", page_icon=" ", layout="wide", initial_sidebar_state="expanded")
@@ -48,6 +48,14 @@ st.write(
 )
 
 
+# LOAD BUSINESS DATA
+BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+RISK_FILE = os.path.join(BASE_DIR, "data", "risk_analysis", "sku_risk_analysis.csv")
+risk_df = pd.read_csv(RISK_FILE)
+total_products = risk_df["sku_id"].nunique()
+total_sales_at_risk = risk_df["Sales_at_Risk"].sum()
+total_capital_locked = risk_df["Capital_Locked"].sum()
+
 
 # BUSINESS OVERVIEW
 st.header("Business Overview")
@@ -55,15 +63,15 @@ col1, col2, col3, col4 = st.columns(4)
 
 
 with col1:
-    st.metric("Products", "1,250")
+    st.metric("Products", f"{total_products:,}")
 
 
 with col2:
-    st.metric("Revenue at Risk", "2,45,000")
+    st.metric("Sales at Risk", f"₹{total_sales_at_risk:,.0f}")
 
 
 with col3:
-    st.metric("Capital Locked","1,18,000")
+    st.metric("Capital Locked", f"{total_capital_locked:,.0f}")
 
 
 with col4:
@@ -156,7 +164,7 @@ with c2:
     st.success("Business Analytics")
     st.write(
         """
-        - Revenue at Risk
+        - Sales at Risk
         - Capital Locked
         - Business KPIs
         - Executive Dashboard
