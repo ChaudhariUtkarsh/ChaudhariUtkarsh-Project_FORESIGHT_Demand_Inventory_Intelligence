@@ -22,20 +22,37 @@ The project uses the following datasets:
 
 ```text
 data/raw/
-├── sales_daily.csv
-├── sku_master.csv
-├── calendar.csv
-└── inventory_snapshots.csv
+├── clean/
+│   ├── store_master.csv
+│   ├── sku_master.csv
+│   ├── customer_master.csv
+│   ├── promotions.csv
+│   ├── inventory_snapshot.csv
+│   └── sales_transactions.csv
+│
+└── anomalies/
+    ├── store_master.csv
+    ├── sku_master.csv
+    ├── customer_master.csv
+    ├── promotions.csv
+    ├── inventory_snapshot.csv
+    ├── sales_transactions.csv
+    └── sku_inventory_flags.csv
 ```
 
 ### Dataset Description
 
-| Dataset                   | Purpose                                      |
-| ------------------------- | -------------------------------------------- |
-| `sales_daily.csv`         | Historical daily SKU-level sales             |
-| `sku_master.csv`          | SKU/product information                      |
-| `calendar.csv`            | Date, seasonal and calendar information      |
-| `inventory_snapshots.csv` | Inventory availability and stock information |
+```text
+|        Dataset           |               Purpose                          |
+|--------------------------|------------------------------------------------|
+| `sales_transactions.csv` | Historical transaction-level sales             |
+| `sku_master.csv`         | SKU/product information, pricing and brand     |
+| `store_master.csv`       | Store information and location                 |
+| `customer_master.csv`    | Customer and loyalty information               |
+| `promotions.csv`         | Promotion and discount information             |
+| `inventory_snapshot.csv` | Inventory availability and reorder information |
+| `sku_inventory_flags.csv`| Ground-truth inventory anomaly labels          |
+```
 
 ### Processed Data
 
@@ -62,7 +79,7 @@ This dataset has one row per SKU per week and uses `weekly_units_sold` as the fo
 ### Step 1 — Clone Repository
 
 ```bash
-git clone https://github.com/ChaudhariUtkarsh/Project_FORESIGHT_Demand_Inventory_Intelligence.git
+git clone https://github.com/ChaudhariUtkarsh/ChaudhariUtkarsh-Project_FORESIGHT_Demand_Inventory_Intelligence.git
 cd Project_FORESIGHT_Demand_Inventory_Intelligence
 ```
 
