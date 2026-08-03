@@ -515,7 +515,7 @@ The scoring API is deployed as a public FastAPI service.
 
 ```text
 API URL:
-https://chaudhariutkarsh-project-foresight.onrender.com
+https://chaudhariutkarsh-project-foresight-3eg8.onrender.com
 ```
 
 Both URLs should be publicly accessible without requiring the local development environment.
