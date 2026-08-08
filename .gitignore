@@ -1,29 +1,20 @@
-# Virtual Environment
 .venv/
 venv/
 
-# Python Cache
 __pycache__/
 *.py[cod]
 
-# Jupyter Notebook
 .ipynb_checkpoints/
 
-# Environment Variables
 .env
 
-# Logs
 *.log
 
-# VS Code
 .vscode/
 
-# OS Files
 Thumbs.db
 .DS_Store
 
-# Data
 data/raw/
 
-# Streamlit
 .streamlit/
