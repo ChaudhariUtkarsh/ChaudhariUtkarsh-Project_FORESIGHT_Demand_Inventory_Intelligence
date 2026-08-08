@@ -30,34 +30,9 @@ class FeatureEngineering:
 
     def create_rolling_features(self):
         logger.info("Creating Rolling Features...")
-
-        self.df["rolling_mean_7"] = (
-            self.df.groupby("sku_id")["units_sold"]
-            .transform(
-                lambda x:
-                x.shift(1)
-                .rolling(window=7, min_periods=1).mean()
-            )
-        )
-
-        self.df["rolling_std_7"] = (
-            self.df.groupby("sku_id")["units_sold"]
-            .transform(
-                lambda x:
-                x.shift(1)
-                .rolling(window=7, min_periods=1).std()
-            )
-        )
-
-        self.df["rolling_mean_30"] = (
-            self.df.groupby("sku_id")["units_sold"]
-            .transform(
-                lambda x:
-                x.shift(1)
-                .rolling(window=30, min_periods=1).mean()
-            )
-        )
-
+        self.df["rolling_mean_7"] = (self.df.groupby("sku_id")["units_sold"].transform(lambda x: x.shift(1).rolling(window=7, min_periods=1).mean()))
+        self.df["rolling_std_7"] = (self.df.groupby("sku_id")["units_sold"].transform(lambda x: x.shift(1).rolling(window=7, min_periods=1).std()))
+        self.df["rolling_mean_30"] = (self.df.groupby("sku_id")["units_sold"].transform(lambda x: x.shift(1).rolling(window=30, min_periods=1).mean()))
 
     def create_price_features(self):
         logger.info("Creating Price Features...")

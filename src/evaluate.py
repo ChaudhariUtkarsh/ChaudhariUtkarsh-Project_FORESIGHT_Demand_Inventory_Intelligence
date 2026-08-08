@@ -4,7 +4,6 @@ import matplotlib.pyplot as plt
 
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
-
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 logger = logging.getLogger(__name__)
 
@@ -13,16 +12,12 @@ class ModelEvaluator:
     def __init__(self, y_true, y_pred):
         self.y_true = np.array(y_true)
         self.y_pred = np.array(y_pred)
-
     def mae(self):
         return mean_absolute_error(self.y_true, self.y_pred)
-
     def rmse(self):
         return np.sqrt(mean_squared_error(self.y_true, self.y_pred))
-
     def r2(self):
         return r2_score(self.y_true, self.y_pred)
-
     def mape(self):
         y_true = np.where(self.y_true == 0, 1, self.y_true)
         return np.mean(np.abs((y_true - self.y_pred) / y_true)) * 100
@@ -88,7 +83,6 @@ class ModelEvaluator:
         plt.grid(True)
         plt.tight_layout()
         plt.show()
-
 
 if __name__ == "__main__":
     np.random.seed(10)

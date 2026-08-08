@@ -1,351 +1,450 @@
-import streamlit as st
-import pandas as pd
-import numpy as np
-import plotly.express as px
 import os
+import pandas as pd
+import streamlit as st
 
 
-# PAGE CONFIGURATION
-st.set_page_config(page_title="Dashboard | Project FORESIGHT", page_icon=" ", layout="wide", initial_sidebar_state="expanded")
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+PROCESSED_DIR = os.path.join(PROJECT_ROOT, "data", "processed")
+RISK_FILE = os.path.join(PROCESSED_DIR, "inventory_risk_scores.csv")
+REORDER_FILE = os.path.join(PROCESSED_DIR, "reorder_priority_list.csv")
+MARKDOWN_FILE = os.path.join(PROCESSED_DIR, "markdown_clear_priority_list.csv")
+st.set_page_config(page_title="Project Foresight", page_icon=" ", layout="wide")
 
 
-# LOAD CSS
-def load_css():
-    css_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "style.css")
+st.markdown(
+    """
+    <style>
+    .main-title {font-size: 36px; font-weight: 700; margin-bottom: 5px;}
+    .sub-title {font-size: 17px; color: #666; margin-bottom: 25px;}
+    </style>""", unsafe_allow_html=True
+)
+st.markdown('<div class="main-title">Project Foresight</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-title">' 'Inventory Risk, Reorder & Markdown/Clear Decision Intelligence Dashboard' '</div>', unsafe_allow_html=True)
 
-    if os.path.exists(css_path):
-        with open(css_path, "r", encoding="utf-8") as f:
-            st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+@st.cache_data
+def load_csv(path):
+    if not os.path.exists(path):
+        return None
+    try:
+        df = pd.read_csv(path)
+    except Exception as e:
+        st.error(f"Error reading file: {os.path.basename(path)}")
+        st.error(str(e))
+        return None
 
-load_css()
+    df.columns = (df.columns.astype(str).str.strip())
+
+    if "week_start" in df.columns:
+        df["week_start"] = pd.to_datetime(df["week_start"], errors="coerce")
+
+    if "sku_id" in df.columns:
+        df["sku_id"] = (df["sku_id"].astype(str).str.strip())
+
+    if "risk_level" in df.columns:
+        df["risk_level"] = (df["risk_level"].astype(str).str.strip().str.upper())
+
+    if "reorder_priority" in df.columns:
+        df["reorder_priority"] = (df["reorder_priority"].astype(str).str.strip().str.upper())
+
+    if "markdown_clear_priority" in df.columns:
+        df["markdown_clear_priority"] = (df["markdown_clear_priority"].astype(str).str.strip().str.upper())
+    return df
+
+risk_df = load_csv(RISK_FILE)
+reorder_df = load_csv(REORDER_FILE)
+markdown_df = load_csv(MARKDOWN_FILE)
 
 
-# TITLE
-st.title("Project FORESIGHT Dashboard")
-st.subheader("Demand Forecasting & Inventory Intelligence")
-st.markdown("---")
-
-
-# DATA PATH
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-DATA_PATH = os.path.join(BASE_DIR, "data", "processed", "processed_data.csv")
-
-
-# LOAD DATA
-if not os.path.exists(DATA_PATH):
-    st.error(f"Processed dataset not found:\n{DATA_PATH}")
+if risk_df is None:
+    st.error("inventory_risk_scores.csv not found.")
+    st.info(
+        "Run these commands first:\n\n"
+        "python src/pipeline.py\n\n"
+        "python src/train_model.py\n\n"
+        "python src/risk_scoring.py"
+    )
     st.stop()
-df = pd.read_csv(DATA_PATH)
-df.columns = (df.columns.str.strip().str.lower().str.replace(" ", "_"))
+st.sidebar.title("Dashboard Filters")
+
+risk_levels = ["ALL"]
+if "risk_level" in risk_df.columns:
+    available_risks = (risk_df["risk_level"].dropna().astype(str).str.strip().str.upper().unique().tolist())
+    preferred_order = ["HIGH", "MEDIUM", "LOW"]
+    available_risks = [x for x in preferred_order if x in available_risks]
+    risk_levels += available_risks
+selected_risk = st.sidebar.selectbox("Risk Level", risk_levels)
 
 
-# DATA TYPE CLEANING
-numeric_columns = ["units_sold", "forecast_units", "actual_units", "on_hand_units", "on_order_units", "selling_price", "unit_cost", "revenue", "inventory_value", "lead_time_days"]
-
-for col in numeric_columns:
-    if col in df.columns:
-        df[col] = (df[col].astype(str).str.replace(",", "", regex=False).str.replace("₹", "", regex=False).str.strip())
-        df[col] = pd.to_numeric(df[col], errors="coerce")
-
-
-# DATE COLUMN
-date_columns = ["date", "week_start", "forecast_date"]
-for col in date_columns:
-    if col in df.columns:
-        df[col] = pd.to_datetime(df[col], errors="coerce")
+if "sku_id" in risk_df.columns:
+    sku_options = ["ALL"]
+    sku_values = (risk_df["sku_id"].dropna().astype(str).str.strip().unique().tolist())
+    sku_options += sorted(sku_values)
+    selected_sku = st.sidebar.selectbox("SKU", sku_options)
+else:
+    selected_sku = "ALL"
 
 
-# BASIC VALIDATION
-if "sku_id" not in df.columns:
-    st.error("Required column 'sku_id' not found in dataset.")
-    st.stop()
-
-if "category" not in df.columns:
-    df["category"] = "Unknown"
-
-
-# SIDEBAR
-st.sidebar.title("Project FORESIGHT")
-st.sidebar.markdown("### Dashboard Filters")
-st.sidebar.markdown("---")
+reorder_priority_options = ["ALL"]
+if (reorder_df is not None and "reorder_priority" in reorder_df.columns):
+    priorities = (reorder_df["reorder_priority"].dropna().astype(str).str.strip().str.upper().unique().tolist())
+    priority_order = ["CRITICAL", "HIGH", "MEDIUM", "LOW"]
+    priorities = [x for x in priority_order if x in priorities]
+    reorder_priority_options += priorities
+selected_reorder_priority = st.sidebar.selectbox("Reorder Priority", reorder_priority_options)
 
 
-# CATEGORY FILTER
-categories = sorted(df["category"].dropna().astype(str).unique().tolist())
-selected_category = st.sidebar.selectbox("Category", ["All"] + categories)
-filtered_df = df.copy()
+markdown_priority_options = ["ALL"]
+if (markdown_df is not None and "markdown_clear_priority" in markdown_df.columns):
+    priorities = (markdown_df["markdown_clear_priority"].dropna().astype(str).str.strip().str.upper().unique().tolist())
+    priority_order = ["HIGH", "MEDIUM", "LOW"]
+    priorities = [x for x in priority_order if x in priorities]
+    markdown_priority_options += priorities
+selected_markdown_priority = st.sidebar.selectbox("Markdown/Clear Priority", markdown_priority_options)
 
 
-if selected_category != "All":
-    filtered_df = filtered_df[filtered_df["category"].astype(str) == selected_category]
+filtered_risk = risk_df.copy()
+if (selected_risk != "ALL" and "risk_level" in filtered_risk.columns):
+    filtered_risk = filtered_risk[filtered_risk["risk_level"] == selected_risk]
+
+if (selected_sku != "ALL" and "sku_id" in filtered_risk.columns):
+    filtered_risk = filtered_risk[filtered_risk["sku_id"].astype(str) == str(selected_sku)]
+
+if reorder_df is not None:
+    filtered_reorder = reorder_df.copy()
+else:
+    filtered_reorder = None
+
+if (filtered_reorder is not None and selected_reorder_priority != "ALL" and "reorder_priority" in filtered_reorder.columns):
+    filtered_reorder = filtered_reorder[filtered_reorder["reorder_priority"] == selected_reorder_priority]
+
+if (filtered_reorder is not None and selected_sku != "ALL" and "sku_id" in filtered_reorder.columns):
+    filtered_reorder = filtered_reorder[filtered_reorder["sku_id"].astype(str) == str(selected_sku)]
 
 
-# SKU FILTER
-sku_values = sorted(
-    filtered_df["sku_id"].dropna().astype(str).unique().tolist())
-selected_sku = st.sidebar.selectbox("SKU", ["All"] + sku_values)
+if markdown_df is not None:
+    filtered_markdown = markdown_df.copy()
+else:
+    filtered_markdown = None
+
+if (filtered_markdown is not None and selected_markdown_priority != "ALL" and "markdown_clear_priority" in filtered_markdown.columns):
+    filtered_markdown = filtered_markdown[filtered_markdown["markdown_clear_priority"] == selected_markdown_priority]
+
+if (filtered_markdown is not None and selected_sku != "ALL" and "sku_id" in filtered_markdown.columns):
+    filtered_markdown = filtered_markdown[filtered_markdown["sku_id"].astype(str) == str(selected_sku)]
 
 
-if selected_sku != "All":
-    filtered_df = filtered_df[filtered_df["sku_id"].astype(str) == selected_sku]
-
-
-st.sidebar.markdown("---")
-st.sidebar.info("Weekly SKU-level Demand & Inventory Intelligence")
-
-
-# KPI CALCULATIONS
-total_skus = (filtered_df["sku_id"].nunique())
-if "units_sold" in filtered_df.columns:
-    total_demand = (filtered_df["units_sold"].fillna(0).sum())
+st.subheader("Inventory Risk Overview")
+total_records = len(filtered_risk)
+if "risk_level" in filtered_risk.columns:
+    high_risk_count = (filtered_risk["risk_level"].eq("HIGH").sum())
+    medium_risk_count = (filtered_risk["risk_level"].eq("MEDIUM").sum())
+    low_risk_count = (filtered_risk["risk_level"].eq("LOW").sum())
 
 else:
-    total_demand = 0
+    high_risk_count = 0
+    medium_risk_count = 0
+    low_risk_count = 0
 
-if "forecast_units" in filtered_df.columns:
-    total_forecast = (filtered_df["forecast_units"].fillna(0).sum())
-
-else:
-    total_forecast = 0
-
-if "on_hand_units" in filtered_df.columns:
-    total_inventory = (filtered_df["on_hand_units"].fillna(0).sum())
-
-else:
-    total_inventory = 0
-
-
-# RISK CALCULATION
-if "forecast_units" in filtered_df.columns:
-    forecast_for_risk = (filtered_df["forecast_units"].fillna(0))
+if "risk_score" in filtered_risk.columns:
+    risk_values = pd.to_numeric(filtered_risk["risk_score"], errors="coerce")
+    avg_risk = risk_values.mean()
+    if pd.isna(avg_risk):
+        avg_risk = 0
 
 else:
-    forecast_for_risk = pd.Series(0, index=filtered_df.index)
+    avg_risk = 0
 
-
-if "on_hand_units" in filtered_df.columns:
-    inventory_for_risk = (filtered_df["on_hand_units"].fillna(0))
-
-else:
-    inventory_for_risk = pd.Series(0, index=filtered_df.index)
-
-
-if "on_order_units" in filtered_df.columns:
-    on_order_for_risk = (filtered_df["on_order_units"].fillna(0))
-
-else:
-    on_order_for_risk = pd.Series(0, index=filtered_df.index)
-
-available_inventory = (inventory_for_risk + on_order_for_risk)
-
-
-# STOCKOUT / OVERSTOCK FLAGS
-filtered_df["stockout_risk"] = (available_inventory < forecast_for_risk)
-filtered_df["overstock_risk"] = (available_inventory > forecast_for_risk * 1.5)
-
-
-def get_risk(row):
-    if row["stockout_risk"]:
-        return "High Stockout"
-    elif row["overstock_risk"]:
-        return "Overstock"
-    else:
-        return "Healthy"
-filtered_df["risk_level"] = (filtered_df.apply(get_risk, axis=1))
-
-
-# RISK COUNTS
-high_stockout_count = (filtered_df["risk_level"].eq("High Stockout").sum())
-overstock_count = (filtered_df["risk_level"].eq("Overstock").sum())
-healthy_count = (filtered_df["risk_level"].eq("Healthy").sum())
-
-
-# KPI SECTION
-st.header("Business Overview")
-col1, col2, col3, col4 = st.columns(4)
+col1, col2, col3, col4, col5 = st.columns(5)
 
 with col1:
-    st.metric("Total SKUs", f"{total_skus:,}")
+    st.metric("Total Records", f"{total_records:,}")
 
 with col2:
-    st.metric("Forecast Demand", f"{total_forecast:,.0f}")
+    st.metric("High Risk", f"{high_risk_count:,}")
 
 with col3:
-    st.metric("Current Inventory", f"{total_inventory:,.0f}")
+    st.metric("Medium Risk", f"{medium_risk_count:,}")
 
 with col4:
-    st.metric("Stockout Risk", f"{high_stockout_count:,}")
+    st.metric("Low Risk", f"{low_risk_count:,}")
 
-st.markdown("---")
+with col5:
+    st.metric("Average Risk", f"{avg_risk:.2f}")
 
-
-# RISK SUMMARY
-st.header("Inventory Risk Summary")
-r1, r2, r3 = st.columns(3)
-with r1:
-    st.error(f"High Stockout: {high_stockout_count}")
-
-with r2:
-    st.warning(f"Overstock: {overstock_count}")
-
-with r3:
-    st.success(f"Healthy: {healthy_count}")
-
-st.markdown("---")
+if (medium_risk_count == 0 and total_records > 0):
+    st.warning(
+        "No MEDIUM risk records found in the current "
+        "filtered dataset. Check risk scoring thresholds "
+        "if MEDIUM risk records are expected."
+    )
+st.divider()
 
 
-# FORECAST VS ACTUAL
-st.header("Forecast vs Actual")
-has_actual = "units_sold" in filtered_df.columns
-has_forecast = "forecast_units" in filtered_df.columns
+st.subheader("Reorder Decision Summary")
+if filtered_reorder is not None:
+    reorder_count = len(filtered_reorder)
 
-if has_actual and has_forecast:
-    chart_df = filtered_df.copy()
 
-    if "week_start" in chart_df.columns:
-        chart_df = (chart_df.groupby("week_start", as_index=False).agg(Actual=("units_sold", "sum"), Forecast=("forecast_units", "sum")).sort_values("week_start"))
-        chart_df = chart_df.dropna(subset=["week_start"])
+    reorder_units = 0
+    reorder_column_used = None
+    possible_reorder_columns = ["reorder_units", "recommended_reorder_units", "recommended_reorder_qty", "reorder_quantity"]
 
-        if not chart_df.empty:
-            chart_df = chart_df.melt(id_vars=["week_start"], value_vars=["Actual", "Forecast"], var_name="Type", value_name="Units")
-            fig = px.line(chart_df, x="week_start", y="Units", color="Type", markers=True, title="Weekly Forecast vs Actual Demand")
-            fig.update_layout(xaxis_title="Week", yaxis_title="Units")
-            st.plotly_chart(fig, use_container_width=True)
 
-        else:
-            st.info("No valid weekly data available.")
+    for column in possible_reorder_columns:
+        if column in filtered_reorder.columns:
+            values = pd.to_numeric(filtered_reorder[column], errors="coerce").fillna(0)
+            reorder_units = values.sum()
+            reorder_column_used = column
+            break
+
+
+    if "reorder_priority" in filtered_reorder.columns:
+        critical_reorders = (filtered_reorder["reorder_priority"].eq("CRITICAL").sum())
+        high_reorders = (filtered_reorder["reorder_priority"].eq("HIGH").sum())
+        medium_reorders = (filtered_reorder["reorder_priority"].eq("MEDIUM").sum())
+        low_reorders = (filtered_reorder["reorder_priority"].eq("LOW").sum())
 
     else:
-        comparison = pd.DataFrame({"Type": ["Actual", "Forecast"], "Units": [filtered_df["units_sold"].fillna(0).sum(), filtered_df["forecast_units"].fillna(0).sum()]})
-        fig = px.bar(comparison, x="Type", y="Units", text_auto=True, title="Forecast vs Actual Demand")
-        st.plotly_chart(fig, use_container_width=True)
-else:
-    st.info("Forecast or Actual demand columns are not available.")
-st.markdown("---")
+        critical_reorders = 0
+        high_reorders = 0
+        medium_reorders = 0
+        low_reorders = 0
 
 
-# RISK DISTRIBUTION
-st.header("Risk Distribution")
-risk_count = (filtered_df["risk_level"].value_counts().reset_index())
-risk_count.columns = ["Risk Level", "Count"]
+    r1, r2, r3, r4 = st.columns(4)
 
-if not risk_count.empty:
-    risk_fig = px.pie(risk_count, names="Risk Level", values="Count", title="Inventory Risk Distribution", hole=0.4)
-    st.plotly_chart(risk_fig, use_container_width=True)
+    with r1:
+        st.metric("Total Reorder Records", f"{reorder_count:,}")
 
-st.markdown("---")
+    with r2:
+        st.metric("Critical", f"{critical_reorders:,}")
 
+    with r3:
+        st.metric("Medium", f"{medium_reorders:,}")
 
-# PRIORITIZED REORDER LIST
-st.header("Prioritized Reorder List")
-reorder_df = filtered_df[filtered_df["risk_level"] == "High Stockout"].copy()
+    with r4:
+        st.metric("Reorder Units", f"{reorder_units:,.0f}")
 
-if not reorder_df.empty:
-    reorder_df["shortage_units"] = (forecast_for_risk.loc[reorder_df.index] - available_inventory.loc[reorder_df.index]).clip(lower=0)
-    reorder_df["priority"] = (reorder_df["shortage_units"].rank(ascending=False, method="dense"))
-    reorder_columns = ["sku_id", "category"]
-
-    if "forecast_units" in reorder_df.columns:
-        reorder_columns.append("forecast_units")
-
-    if "on_hand_units" in reorder_df.columns:
-        reorder_columns.append("on_hand_units")
-
-    if "on_order_units" in reorder_df.columns:
-        reorder_columns.append("on_order_units")
-
-    reorder_columns += ["shortage_units", "priority"]
-    reorder_display = (reorder_df[reorder_columns].sort_values("shortage_units", ascending=False).head(20).copy())
-
-    for col in reorder_display.columns:
-        if col not in ["sku_id", "category"]:
-            reorder_display[col] = pd.to_numeric(reorder_display[col], errors="coerce")
-
-    st.dataframe(
-        reorder_display, use_container_width=True, hide_index=True)
+    if reorder_count > 0 and reorder_units == 0:
+        st.warning(
+            "Reorder records exist, but total Reorder Units "
+            "are 0. Check the reorder quantity column in "
+            "reorder_priority_list.csv."
+        )
 
 else:
-    st.success("No high stockout SKUs found.")
-
-st.markdown("---")
+    st.warning("reorder_priority_list.csv not found.")
 
 
-# MARKDOWN LIST
-st.header("Prioritized Markdown List")
-markdown_df = filtered_df[filtered_df["risk_level"] == "Overstock"].copy()
+st.subheader("Prioritised Reorder List")
+if (filtered_reorder is not None and len(filtered_reorder) > 0):
+    display_reorder = filtered_reorder.copy()
 
-if not markdown_df.empty:
-    markdown_df["excess_units"] = (available_inventory.loc[markdown_df.index] - (forecast_for_risk.loc[markdown_df.index] * 1.5)).clip(lower=0)
-    markdown_df = (markdown_df.sort_values("excess_units", ascending=False).head(20))
-    markdown_columns = ["sku_id", "category"]
+    if "reorder_priority" in display_reorder.columns:
+        priority_order = {"CRITICAL": 1, "HIGH": 2, "MEDIUM": 3, "LOW": 4}
+        display_reorder["_priority_order"] = (display_reorder["reorder_priority"].map(priority_order).fillna(99))
+        display_reorder = (display_reorder.sort_values("_priority_order").drop(columns="_priority_order"))
 
-    if "forecast_units" in markdown_df.columns:
-        markdown_columns.append("forecast_units")
-
-    if "on_hand_units" in markdown_df.columns:
-        markdown_columns.append("on_hand_units")
-
-    if "on_order_units" in markdown_df.columns:
-        markdown_columns.append("on_order_units")
-
-    markdown_columns.append("excess_units")
-    markdown_display = (markdown_df[markdown_columns].copy())
-
-    for col in markdown_display.columns:
-        if col not in ["sku_id", "category"]:
-            markdown_display[col] = pd.to_numeric(markdown_display[col], errors="coerce")
-
-    st.dataframe(markdown_display, use_container_width=True, hide_index=True)
+    st.dataframe(display_reorder, use_container_width=True, hide_index=True)
+    reorder_csv = (display_reorder.to_csv(index=False).encode("utf-8"))
+    st.download_button(label="Download Reorder Priority List", data=reorder_csv, file_name="reorder_priority_list.csv", mime="text/csv")
 
 else:
-    st.success("No overstock SKUs found.")
+    st.info("No reorder records found for current filters.")
+st.divider()
 
-st.markdown("---")
+
+st.subheader("Markdown / Clear Decision Summary")
+if filtered_markdown is not None:
+    markdown_count = len(filtered_markdown)
+
+    excess_units = 0
+    possible_excess_columns = ["excess_inventory_units", "excess_units", "excess_inventory", "excess_quantity"]
+    excess_column_used = None
+
+    for column in possible_excess_columns:
+        if column in filtered_markdown.columns:
+            values = pd.to_numeric(filtered_markdown[column], errors="coerce").fillna(0)
+            excess_units = values.sum()
+            excess_column_used = column
+            break
+
+    if "markdown_clear_priority" in filtered_markdown.columns:
+        high_markdown = (filtered_markdown["markdown_clear_priority"].eq("HIGH").sum())
+        medium_markdown = (filtered_markdown["markdown_clear_priority"].eq("MEDIUM").sum())
+        low_markdown = (filtered_markdown["markdown_clear_priority"].eq("LOW").sum())
+
+    else:
+        high_markdown = 0
+        medium_markdown = 0
+        low_markdown = 0
+
+    m1, m2, m3, m4, m5 = st.columns(5)
+    with m1:
+        st.metric("Total Markdown/Clear", f"{markdown_count:,}")
+
+    with m2:
+        st.metric("High", f"{high_markdown:,}")
+
+    with m3:
+        st.metric("Medium", f"{medium_markdown:,}")
+
+    with m4:
+        st.metric("Low", f"{low_markdown:,}")
+
+    with m5:
+        st.metric("Excess Inventory", f"{excess_units:,.0f}")
+
+else:
+    st.warning("markdown_clear_priority_list.csv not found.")
 
 
-# INVENTORY VS FORECAST
-st.header("Inventory vs Forecast")
-if ("forecast_units" in filtered_df.columns and "on_hand_units" in filtered_df.columns):
-    comparison_df = pd.DataFrame({
-        "Metric": ["Forecast Demand", "On-Hand Inventory", "On-Order Inventory"],
-        "Units": [filtered_df["forecast_units"].fillna(0).sum(),
-            filtered_df["on_hand_units"].fillna(0).sum(),
-            filtered_df["on_order_units"].fillna(0).sum()
-            if "on_order_units" in filtered_df.columns
-            else 0
+st.subheader("Prioritised Markdown / Clear List")
+if (filtered_markdown is not None and len(filtered_markdown) > 0):
+    display_markdown = filtered_markdown.copy()
+
+    if "markdown_clear_priority" in display_markdown.columns:
+        priority_order = {"HIGH": 1, "MEDIUM": 2, "LOW": 3}
+        display_markdown["_priority_order"] = (display_markdown["markdown_clear_priority"].map(priority_order).fillna(99))
+        display_markdown = (display_markdown.sort_values("_priority_order").drop(columns="_priority_order"))
+
+    st.dataframe(display_markdown, use_container_width=True, hide_index=True)
+    markdown_csv = (display_markdown.to_csv(index=False).encode("utf-8"))
+    st.download_button(label="Download Markdown/Clear Priority List", data=markdown_csv, file_name="markdown_clear_priority_list.csv", mime="text/csv")
+
+else:
+    st.info("No markdown/clear records found for current filters.")
+st.divider()
+
+
+st.subheader("Decision Intelligence")
+d1, d2 = st.columns(2)
+
+
+with d1:
+    st.markdown("###Reorder Action")
+    if (filtered_reorder is not None and len(filtered_reorder) > 0):
+        if "reorder_priority" in filtered_reorder.columns:
+            critical = (filtered_reorder["reorder_priority"].eq("CRITICAL").sum())
+
+            high = (filtered_reorder["reorder_priority"].eq("HIGH").sum())
+            medium = (filtered_reorder["reorder_priority"].eq("MEDIUM").sum())
+            low = (filtered_reorder["reorder_priority"].eq("LOW").sum())
+
+            st.write(f"**Critical Reorders:** {critical:,}")
+            st.write(f"**High Reorders:** {high:,}")
+            st.write(f"**Medium Reorders:** {medium:,}")
+            st.write(f"**Low Reorders:** {low:,}")
+
+            if critical > 0:
+                st.error("Immediate supplier/replenishment action required.")
+            elif high > 0:
+                st.error("High-priority replenishment action required.")
+            elif medium > 0:
+                st.warning("Plan replenishment for medium-priority SKUs.")
+            else:
+                st.success("No critical reorder action required.")
+
+    else:
+        st.success("No reorder action required for current filter.")
+
+
+with d2:
+    st.markdown("###Markdown / Clear Action")
+    if (filtered_markdown is not None and len(filtered_markdown) > 0):
+        if "markdown_clear_priority" in filtered_markdown.columns:
+            high = (filtered_markdown["markdown_clear_priority"].eq("HIGH").sum())
+            medium = (filtered_markdown["markdown_clear_priority"].eq("MEDIUM").sum())
+            low = (filtered_markdown["markdown_clear_priority"].eq("LOW").sum())
+
+            st.write(f"**High Markdown/Clear:** {high:,}")
+            st.write(f"**Medium Markdown/Clear:** {medium:,}")
+            st.write(f"**Low Markdown/Clear:** {low:,}")
+
+            if high > 0:
+                st.error("Prioritise these SKUs for markdown/clearance.")
+            elif medium > 0:
+                st.warning("Consider promotional pricing for medium-priority inventory.")
+            elif low > 0:
+                st.info("Low-priority markdown/clear actions identified.")
+            else:
+                st.success("No urgent markdown/clear action required.")
+
+    else:
+        st.success("No markdown/clear action required for current filter.")
+st.divider()
+
+
+st.subheader("Risk Distribution")
+if ("risk_level" in filtered_risk.columns and len(filtered_risk) > 0):
+    risk_distribution = (filtered_risk["risk_level"].value_counts().reindex(["HIGH", "MEDIUM", "LOW"], fill_value=0).rename_axis("Risk Level").reset_index(name="Records"))
+    st.bar_chart(risk_distribution.set_index("Risk Level"))
+else:
+    st.info("No risk distribution data available.")
+
+
+st.subheader("Top High-Risk Inventory")
+if ("risk_score" in filtered_risk.columns and len(filtered_risk) > 0):
+    filtered_risk["risk_score"] = pd.to_numeric(filtered_risk["risk_score"], errors="coerce")
+    top_risk = (filtered_risk.sort_values("risk_score", ascending=False).head(20))
+
+    top_columns = [
+        "sku_id",
+        "week_start",
+        "forecast_weekly_demand",
+        "on_hand_units",
+        "on_order_units",
+        "available_inventory",
+        "projected_inventory",
+        "inventory_coverage_weeks",
+        "risk_score",
+        "risk_level",
+        "stockout_risk",
+        "risk_reason",
+        "recommended_action"
+    ]
+    top_columns = [col for col in top_columns if col in top_risk.columns]
+
+    if len(top_columns) > 0:
+        st.dataframe(top_risk[top_columns], use_container_width=True, hide_index=True)
+    else:
+        st.dataframe(top_risk, use_container_width=True, hide_index=True)
+
+else:
+    st.info("No high-risk inventory data available.")
+
+
+with st.expander("Data Diagnostics"):
+    st.write("### Risk Dataset")
+    st.write(f"Rows: {len(risk_df):,}")
+    st.write("Columns:", risk_df.columns.tolist())
+
+    if "risk_level" in risk_df.columns:
+        st.write("Risk Level Distribution:")
+        st.dataframe(risk_df["risk_level"].value_counts().rename_axis("Risk Level").reset_index(name="Records"), hide_index=True)
+
+    if reorder_df is not None:
+        st.write("### Reorder Dataset")
+        st.write(f"Rows: {len(reorder_df):,}")
+        st.write("Columns:", reorder_df.columns.tolist())
+
+        reorder_quantity_columns = [
+            col for col in ["reorder_units", "recommended_reorder_units", "recommended_reorder_qty", "reorder_quantity"]
+            if col in reorder_df.columns
         ]
-    })
 
-    comparison_df["Units"] = pd.to_numeric(comparison_df["Units"], errors="coerce")
-    comparison_fig = px.bar(comparison_df, x="Metric", y="Units", text_auto=True, title="Forecast Demand vs Available Inventory")
-    comparison_fig.update_layout(xaxis_title="Metric", yaxis_title="Units")
-    st.plotly_chart(comparison_fig, use_container_width=True)
+        st.write("Reorder quantity columns found:", reorder_quantity_columns)
 
-st.markdown("---")
+        if reorder_quantity_columns:
+            for col in reorder_quantity_columns:
+                total = pd.to_numeric(reorder_df[col], errors="coerce").fillna(0).sum()
+                st.write(f"{col}: {total:,.0f}")
 
-
-# DASHBOARD DATA
-st.header("Dashboard Data")
-display_df = filtered_df.copy()
-
-for col in display_df.columns:
-    if col not in ["sku_id", "category", "risk_level"]:
-        if display_df[col].dtype == "object":
-            cleaned = (display_df[col].astype(str).str.replace(",", "", regex=False).str.replace("₹", "", regex=False).str.strip())
-            converted = pd.to_numeric(cleaned, errors="coerce")
-            if converted.notna().mean() >= 0.80:
-                display_df[col] = converted
-
-st.dataframe(display_df, use_container_width=True, hide_index=True)
-st.markdown("---")
+    if markdown_df is not None:
+        st.write("### Markdown Dataset")
+        st.write(f"Rows: {len(markdown_df):,}")
+        st.write("Columns:", markdown_df.columns.tolist())
 
 
-# DOWNLOAD CSV
-st.header("Download Dashboard Data")
-csv_data = (display_df.to_csv(index=False).encode("utf-8"))
-st.download_button(label="Download Dashboard CSV", data=csv_data, file_name="foresight_dashboard.csv", mime="text/csv")
-st.markdown("---")
-
-
-# FOOTER
-st.caption("Project FORESIGHT | AI-Powered Demand Forecasting & Inventory Intelligence")
+st.divider()
+st.caption("Project Foresight | Inventory Risk, Reorder & " "Markdown/Clear Decision Intelligence")

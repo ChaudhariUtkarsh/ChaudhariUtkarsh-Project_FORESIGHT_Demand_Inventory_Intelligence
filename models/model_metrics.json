@@ -1,36 +1,39 @@
 {
-    "xgboost": {
-        "CV_WAPE (%)": 40.48,
-        "Baseline_WAPE (%)": 53.6,
-        "WAPE_Improvement": 13.12,
-        "Fold_WAPEs": [
-            40.0,
-            39.56,
-            39.19,
-            39.15,
-            44.49
-        ],
-        "Prediction_Interval_Margin": 59.4703,
-        "Uncertainty_Level": "80%",
-        "Residual_STD": 46.4032
+    "project": "Project FORESIGHT",
+    "target": "weekly_units_sold",
+    "required_season_length": 52,
+    "actual_season_length": 52,
+    "baseline": "52-week Seasonal-Naive",
+    "baseline_status": "FULL_52_WEEK_BASELINE",
+    "evaluation_metric": "WAPE",
+    "rolling_origin_folds": 5,
+    "baseline_cv_wape": 12.17,
+    "models": {
+        "xgboost": {
+            "CV_WAPE (%)": 8.57,
+            "Baseline_WAPE (%)": 12.17,
+            "WAPE_Improvement": 3.6,
+            "WAPE_Improvement (%)": 29.58,
+            "Beats_Baseline": true,
+            "Fold_WAPEs": [
+                11.2555,
+                5.4628
+            ]
+        },
+        "lightgbm": {
+            "CV_WAPE (%)": 8.16,
+            "Baseline_WAPE (%)": 12.17,
+            "WAPE_Improvement": 4.02,
+            "WAPE_Improvement (%)": 33.01,
+            "Beats_Baseline": true,
+            "Fold_WAPEs": [
+                10.482,
+                5.4594
+            ]
+        }
     },
-    "lightgbm": {
-        "CV_WAPE (%)": 40.4,
-        "Baseline_WAPE (%)": 53.6,
-        "WAPE_Improvement": 13.2,
-        "Fold_WAPEs": [
-            40.27,
-            39.36,
-            39.11,
-            39.02,
-            44.26
-        ],
-        "Prediction_Interval_Margin": 69.3811,
-        "Uncertainty_Level": "80%",
-        "Residual_STD": 54.1363
-    },
-    "best_model": "lightgbm",
-    "seasonal_naive": {
-        "CV_WAPE (%)": 53.6
-    }
+    "best_ml_model": "lightgbm",
+    "best_ml_cv_wape": 8.16,
+    "production_model": "lightgbm",
+    "ml_beats_baseline": true
 }

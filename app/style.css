@@ -1,6 +1,5 @@
 body {font-family: "Segoe UI", sans-serif; background-color: #F5F7FA;}
 
-/* Main Container */
 .block-container {
     padding-top: 2rem;
     padding-left: 3rem;
@@ -8,28 +7,23 @@ body {font-family: "Segoe UI", sans-serif; background-color: #F5F7FA;}
     padding-bottom: 2rem;
 }
 
-/* Sidebar */
 section[data-testid="stSidebar"] {background: linear-gradient(180deg, #0F172A, #1E293B);
     color: white;
 }
 
-/* Sidebar Text */
 section[data-testid="stSidebar"] * {color: white;}
 
-/* Title */
 h1 {
     color: #1E3A8A;
     font-weight: 700;
     text-align: center;
 }
 
-/* Headers */
 h2,h3,h4 {
     color: #334155;
     font-weight: 600;
 }
 
-/* Metric Cards */
 div[data-testid="metric-container"] {
     background: white;
     border-radius: 15px;
@@ -48,7 +42,6 @@ div[data-testid="metric-container"]:hover {
         rgba(0,0,0,0.18);
 }
 
-/* Buttons */
 .stButton>button {
     background-color: #2563EB;
     color: white;
@@ -64,7 +57,6 @@ div[data-testid="metric-container"]:hover {
     color: white;
 }
 
-/* Download Button */
 .stDownloadButton>button {
     background: #16A34A;
     color: white;
@@ -74,43 +66,32 @@ div[data-testid="metric-container"]:hover {
 
 .stDownloadButton>button:hover {background: #15803D;}
 
-/* Text Input */
+
 input {border-radius: 8px !important;}
 
-/* Select Box */
 div[data-baseweb="select"] {border-radius: 8px;}
 
-/* Slider */
 .stSlider {padding-top: 10px;}
-
-/* Success Box */
 .stAlert {border-radius: 10px;}
 
-/* DataFrame */
 div[data-testid="stDataFrame"] {
     border-radius: 10px;
     overflow: hidden;
 }
 
-/* Tables */
 table {border-radius: 10px;}
 
-/* Footer */
 footer {visibility: hidden;}
 
-/* Hide Streamlit Menu */
 #MainMenu {visibility: hidden;}
-
-/* Hide Header */
 header {visibility: hidden;}
 
-/* KPI Card Animation */
+
 @keyframes fadeIn {
     from {
         opacity: 0;
         transform: translateY(20px);
     }
-
     to {
         opacity: 1;
         transform: translateY(0);
@@ -119,7 +100,6 @@ header {visibility: hidden;}
 
 div[data-testid="metric-container"] {animation: fadeIn 0.7s ease-in-out;}
 
-/* Plotly Graph */
 .js-plotly-plot {
     border-radius: 12px;
     box-shadow:
@@ -129,7 +109,6 @@ div[data-testid="metric-container"] {animation: fadeIn 0.7s ease-in-out;}
     background: white;
 }
 
-/* Cards */
 .card {
     background: white;
     padding: 20px;
@@ -139,7 +118,6 @@ div[data-testid="metric-container"] {animation: fadeIn 0.7s ease-in-out;}
         rgba(0,0,0,0.10);
 }
 
-/* Login Box */
 .login-box {
     background: white;
     padding: 30px;
@@ -149,12 +127,10 @@ div[data-testid="metric-container"] {animation: fadeIn 0.7s ease-in-out;}
         rgba(0,0,0,0.20);
 }
 
-/* Caption */
 .caption {
     color: gray;
     text-align: center;
     font-size: 14px;
 }
 
-/* Divider */
 hr {border: 1px solid #E5E7EB;}

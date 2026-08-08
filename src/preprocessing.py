@@ -3,19 +3,12 @@ import logging
 import pandas as pd
 
 
-# Logging Configuration
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 logger = logging.getLogger(__name__)
 
 
-# Data Preprocessor
 class DataPreprocessor:
-
     def __init__(self, datasets):
-
         self.sales = datasets["sales"]
         self.sku = datasets["sku"]
         self.calendar = datasets["calendar"]
@@ -41,68 +34,29 @@ class DataPreprocessor:
             self.sales["date"] = pd.to_datetime(self.sales["date"], dayfirst=True)
 
         if "date" in self.calendar.columns:
-            self.calendar["date"] = pd.to_datetime(
-                self.calendar["date"], dayfirst=True
-            )
+            self.calendar["date"] = pd.to_datetime(self.calendar["date"], dayfirst=True)
 
         if "date" in self.inventory.columns:
-            self.inventory["date"] = pd.to_datetime(
-                self.inventory["date"], dayfirst=True
-            )
+            self.inventory["date"] = pd.to_datetime(self.inventory["date"], dayfirst=True)
 
         if "launch_date" in self.sku.columns:
-            self.sku["launch_date"] = pd.to_datetime(
-                self.sku["launch_date"]
-            )
+            self.sku["launch_date"] = pd.to_datetime(self.sku["launch_date"])
 
     def merge_datasets(self):
         logger.info("Merging datasets...")
-        merged = self.sales.merge(
-            self.sku,
-            on="sku_id",
-            how="left"
-        )
-
-        merged = merged.merge(
-            self.calendar,
-            on="date",
-            how="left"
-        )
-
-        merged = merged.merge(
-            self.inventory,
-            on=["date", "sku_id"],
-            how="left"
-        )
+        merged = self.sales.merge(self.sku, on="sku_id", how="left")
+        merged = merged.merge(self.calendar, on="date", how="left")
+        merged = merged.merge(self.inventory, on=["date", "sku_id"], how="left")
         logger.info(f"Merged Shape : {merged.shape}")
         return merged
 
-    def save_processed_data(
-        self,
-        dataframe,
-        output_path=None
-    ):
+    def save_processed_data(self, dataframe, output_path=None):
         if output_path is None:
-            output_path = os.path.join(
-                os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                "data", "processed"
-            )
-
+            output_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "processed")
         os.makedirs(output_path, exist_ok=True)
-
-        output_file = os.path.join(
-            output_path,
-            "processed_data.csv"
-        )
-
-        dataframe.to_csv(
-            output_file,
-            index=False
-        )
-
-        logger.info(
-            f"Processed data saved at : {output_file}"
-        )
+        output_file = os.path.join(output_path, "processed_data.csv")
+        dataframe.to_csv(output_file, index=False)
+        logger.info(f"Processed data saved at : {output_file}")
 
     def process(self):
         logger.info("Starting preprocessing pipeline...")
