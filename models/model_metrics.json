@@ -1,0 +1,41 @@
+{
+    "project": "Project FORESIGHT",
+    "target": "weekly_units_sold",
+    "forecast_frequency": "Weekly",
+    "forecast_horizon_weeks": "6-8",
+    "required_season_length": 52,
+    "actual_season_length": 52,
+    "baseline": "52-week Seasonal Naive",
+    "baseline_status": "FULL_52_WEEK_BASELINE",
+    "evaluation_metric": "WAPE",
+    "rolling_origin_folds": 5,
+    "baseline_cv_wape": 12.1746,
+    "models": {
+        "xgboost": {
+            "CV_WAPE (%)": 8.5266,
+            "Baseline_WAPE (%)": 12.1746,
+            "WAPE_Improvement": 3.648,
+            "WAPE_Improvement (%)": 29.9642,
+            "Beats_Baseline": true,
+            "Fold_WAPEs": [
+                11.2965,
+                5.3153
+            ]
+        },
+        "lightgbm": {
+            "CV_WAPE (%)": 8.1089,
+            "Baseline_WAPE (%)": 12.1746,
+            "WAPE_Improvement": 4.0657,
+            "WAPE_Improvement (%)": 33.3947,
+            "Beats_Baseline": true,
+            "Fold_WAPEs": [
+                10.501,
+                5.3357
+            ]
+        }
+    },
+    "best_ml_model": "lightgbm",
+    "best_ml_cv_wape": 8.1089,
+    "production_model": "lightgbm",
+    "ml_beats_baseline": true
+}
