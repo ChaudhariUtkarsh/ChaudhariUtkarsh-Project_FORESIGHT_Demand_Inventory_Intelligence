@@ -464,10 +464,8 @@ def train():
 
     df = create_features(df, season_length)
     features = [column for column in BASE_FEATURES if column in df.columns]
-    seasonal_feature = ("seasonal_lag_52")
-
-    if seasonal_feature in df.columns:
-        features.append(seasonal_featur)
+    seasonal_feature = "seasonal_lag_52"
+    features.append(seasonal_feature)
 
     print(f"\nFeatures used: " f"{len(features)}")
 
