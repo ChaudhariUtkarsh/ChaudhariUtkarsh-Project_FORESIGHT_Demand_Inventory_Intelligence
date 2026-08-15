@@ -1,233 +1,335 @@
 # PROJECT FORESIGHT
 
-## Demand Forecasting & Inventory Intelligence System
+## Demand Forecasting & Inventory Intelligence
 
-PROJECT FORESIGHT is an end-to-end demand forecasting and inventory intelligence system designed to forecast SKU-level demand, evaluate forecast accuracy, identify inventory risks, and support reorder and markdown/clear decisions.
+PROJECT FORESIGHT is an end-to-end data science and analytics system for **SKU-level weekly demand forecasting and inventory risk intelligence**.
 
-The system combines:
+The system combines data ingestion, cleaning, feature engineering, demand forecasting, model evaluation, inventory risk scoring, reorder prioritization, markdown/clear prioritization, a Streamlit dashboard, and a FastAPI scoring service.
 
-* Data preprocessing
-* Weekly demand aggregation
-* Feature engineering
+The project is designed around the Zidio Development Project FORESIGHT engagement requirements, which require a reproducible data pipeline, demand forecast, risk scoring, planning dashboard, deployed scoring service, and stakeholder-ready reporting.
+
+---
+
+# 1. Project Overview
+
+### Project Name
+
+**PROJECT FORESIGHT — Demand & Inventory Intelligence**
+
+### Objective
+
+The primary objective is to help inventory and operations teams answer:
+
+* How much will each SKU likely sell over the next few weeks?
+* Which SKUs are at risk of stockout?
+* Which SKUs are overstocked?
+* Which products should be reordered?
+* Which products should be promoted, cleared, or monitored?
+* Which forecasting model performs best against a seasonal-naive baseline?
+
+The Zidio brief specifically requires weekly SKU-level forecasting, stockout/overstock risk scoring, quantified business impact, a usable dashboard, and a deployed scoring service.
+
+---
+
+# 2. Key Features
+
+PROJECT FORESIGHT provides:
+
+* Data ingestion and preprocessing
+* Data cleaning and validation
+* Sales, SKU, calendar, and inventory integration
+* Weekly SKU-level demand aggregation
+* Forecasting feature engineering
 * 52-week Seasonal Naive baseline
-* Machine Learning forecasting
+* XGBoost forecasting model
+* LightGBM forecasting model
 * Rolling-Origin Cross-Validation
 * WAPE-based model evaluation
+* Production model selection
 * Inventory risk scoring
+* Stockout risk identification
+* Overstock risk identification
 * Reorder prioritization
 * Markdown/Clear prioritization
+* Business insight generation
 * Streamlit dashboard
 * FastAPI prediction service
+* FastAPI inventory scoring service
+* PDF reports
+* Model artifacts and evaluation outputs
 
 ---
 
-# 1. Project Objectives
+# 3. Project Structure
 
-The main objectives of PROJECT FORESIGHT are:
-
-1. Forecast weekly demand at SKU level.
-2. Compare machine learning models against a 52-week Seasonal Naive baseline.
-3. Evaluate forecasting performance using WAPE.
-4. Identify stockout and overstock risks.
-5. Prioritize SKUs for reorder actions.
-6. Identify excess inventory for markdown or clearance.
-7. Provide business-focused insights through a dashboard.
-8. Provide forecasting and inventory scoring APIs.
-
----
-
-# 2. Project Structure
+The following structure reflects the **actual project ZIP structure**.
 
 ```text
-PROJECT_FORESIGHT/
+Project_FORESIGHT/
 │
 ├── app/
 │   ├── Home.py
-│   ├── About.py
-│   ├── pages/
-│   │   ├── 1_Forecast.py
-│   │   ├── 2_Inventory_Risk.py
-│   │   ├── 3_Risk_Scoring.py
-│   │   ├── 4_Reorder_Priority.py
-│   │   └── 5_Markdown_Clear.py
+│   ├── login.py
+│   ├── style.css
+│   ├── utils.py
 │   │
-│   └── utils.py
-│
-├── api/
-│   └── main.py
+│   └── pages/
+│       ├── 1_Dashboard.py
+│       ├── 2_Forecast.py
+│       ├── 3_Risk_Scoring.py
+│       └── 4_About.py
 │
 ├── data/
+│   │
 │   ├── raw/
 │   │   ├── sales_daily.csv
+│   │   ├── sales_daily_104weeks.csv
 │   │   ├── sku_master.csv
 │   │   ├── calendar.csv
 │   │   └── inventory_snapshots.csv
 │   │
-│   └── processed/
-│       ├── processed_data.csv
-│       ├── weekly_model_data.csv
-│       ├── model_evaluation.csv
-│       ├── rolling_origin_cv_results.csv
-│       ├── inventory_risk_scores.csv
-│       ├── reorder_priority_list.csv
-│       └── markdown_clear_priority_list.csv
+│   ├── processed/
+│   │   ├── processed_data.csv
+│   │   ├── processed_data_backup.csv
+│   │   ├── weekly_model_data.csv
+│   │   ├── weekly_model_data_backup.csv
+│   │   ├── model_evaluation.csv
+│   │   ├── rolling_origin_cv_results.csv
+│   │   ├── inventory_risk_scores.csv
+│   │   ├── reorder_priority_list.csv
+│   │   └── markdown_clear_priority_list.csv
+│   │
+│   ├── business_insights/
+│   │   └── business_insights_summary.csv
+│   │
+│   ├── decisioning_grid/
+│   │   └── decisioning_grid.csv
+│   │
+│   └── risk_analysis/
+│       └── sku_risk_analysis.csv
 │
 ├── models/
 │   ├── best_model.pkl
 │   ├── xgboost_model.pkl
 │   ├── lightgbm_model.pkl
+│   ├── label_encoder.pkl
 │   ├── model_metadata.json
-│   ├── model_metrics.json
-│   └── label_encoder.pkl
+│   └── model_metrics.json
+│
+├── notebooks/
+│   └── EDA.ipynb
 │
 ├── reports/
-│   ├── model_evaluation_report.pdf
+│   ├── EDA_Report.pdf
+│   ├── business_insights.pdf
 │   ├── business_report.pdf
-│   └── executive_summary.pdf
+│   ├── feature_importance.csv
+│   ├── model_evaluation_report.pdf
+│   ├── model_metrics.json
+│   ├── project_report.pdf
+│   └── risk_analysis_report.pdf
 │
 ├── src/
-│   ├── pipeline.py
+│   ├── __init__.py
 │   ├── baseline.py
-│   ├── train_model.py
-│   ├── evaluation.py
+│   ├── business_insights.py
+│   ├── check_inventory_merge.py
+│   ├── data_loader.py
+│   ├── diagnose_inventory.py
+│   ├── decisioning_grid.py
+│   ├── evaluate.py
 │   ├── feature_engineering.py
+│   ├── generate_104_week_data.py
+│   ├── pipeline.py
+│   ├── predict.py
+│   ├── preprocessing.py
+│   ├── risk_analysis.py
 │   ├── risk_scoring.py
-│   ├── forecasting.py
-│   └── utils.py
+│   └── train_model.py
 │
+├── api.py
+├── config.py
+├── generate_images.py
+├── main.py
+├── Procfile
+├── render.yaml
 ├── requirements.txt
-├── README.md
-└── .gitignore
+├── .gitignore
+└── README.md
 ```
 
 ---
 
-# 3. Dataset Structure
+# 4. Dataset Structure
 
-PROJECT FORESIGHT uses four official raw datasets for demand forecasting, inventory analysis, and risk scoring.
+The project uses four official raw datasets required for the FORESIGHT engagement.
 
 ```text
-data/
-└── raw/
-    ├── sales_daily.csv
-    ├── sku_master.csv
-    ├── calendar.csv
-    └── inventory_snapshots.csv
+data/raw/
+│
+├── sales_daily.csv
+├── sku_master.csv
+├── calendar.csv
+└── inventory_snapshots.csv
 ```
+
+The Zidio brief defines these four provided extracts as the core project data sources.
 
 ## Dataset Description
 
-| File                      | Description                                                                   |
-| ------------------------- | ----------------------------------------------------------------------------- |
-| `sales_daily.csv`         | Daily SKU-level sales and demand history                                      |
-| `sku_master.csv`          | SKU master information and product-level attributes                           |
-| `calendar.csv`            | Calendar and time-related information                                         |
-| `inventory_snapshots.csv` | Historical inventory information used for inventory analysis and risk scoring |
+| Dataset                   | Purpose                                                                  |
+| ------------------------- | ------------------------------------------------------------------------ |
+| `sales_daily.csv`         | Daily SKU-level sales and demand history                                 |
+| `sku_master.csv`          | SKU/product master information                                           |
+| `calendar.csv`            | Calendar, week, month, season and promotion information                  |
+| `inventory_snapshots.csv` | Inventory position, on-hand, on-order, lead time and reorder information |
 
 ### `sales_daily.csv`
 
-Contains daily SKU-level demand and sales history.
-
-Typical information includes:
+Contains daily SKU-level sales information including:
 
 * Date
 * SKU ID
 * Units sold
-* Sales-related information
+* Revenue
+* Unit price
+* Promotion flag
 
 ### `sku_master.csv`
 
-Contains product and SKU-level master information.
-
-Typical information includes:
+Contains SKU-level master information including:
 
 * SKU ID
-* Product name
-* Product category
-* Product attributes
-* Pricing information
+* Category
+* Subcategory
+* Launch date
+* Unit cost
+* List price
 
 ### `calendar.csv`
 
-Contains date and calendar-related information used to create forecasting features.
-
-Typical information includes:
+Contains calendar information including:
 
 * Date
 * Week
 * Month
-* Year
-* Seasonal information
-* Calendar indicators
+* Season
+* Holiday indicator
+* Promotion event
 
 ### `inventory_snapshots.csv`
 
-Contains historical inventory information used for:
+Contains inventory information including:
 
-* Inventory coverage
-* Stockout risk
-* Overstock risk
-* Reorder analysis
-* Markdown/Clear analysis
+* Date
+* SKU ID
+* On-hand units
+* On-order units
+* Lead time
+* Reorder point
+
+These fields correspond to the data dictionary specified by Zidio.
 
 ---
 
-# 4. Data Processing Pipeline
+# 5. Current Dataset Statistics
 
-The main data processing pipeline is:
+The current project ZIP contains the following raw dataset sizes:
 
 ```text
-Raw Data
-   │
-   ├── sales_daily.csv
-   ├── sku_master.csv
-   ├── calendar.csv
-   └── inventory_snapshots.csv
-          │
-          ▼
-     Data Cleaning
-          │
-          ▼
+sales_daily.csv
+Rows    : 146,200
+Columns : 5
+
+sku_master.csv
+Rows    : 500
+Columns : 5
+
+calendar.csv
+Rows    : 730
+Columns : 5
+
+inventory_snapshots.csv
+Rows    : 50,000
+Columns : 4
+```
+
+The processed weekly forecasting dataset is:
+
+```text
+weekly_model_data.csv
+
+Rows          : 21,000
+SKUs          : 200
+Unique Weeks  : 105
+Start Week    : 2024-01-01
+End Week      : 2025-12-29
+```
+
+---
+
+# 6. Data Processing Pipeline
+
+The main reproducible pipeline is:
+
+```text
+Raw Datasets
+     │
+     ├── sales_daily.csv
+     ├── sku_master.csv
+     ├── calendar.csv
+     └── inventory_snapshots.csv
+             │
+             ▼
+       Data Loading
+             │
+             ▼
+      Data Validation
+             │
+             ▼
+       Data Cleaning
+             │
+             ▼
      Data Integration
-          │
-          ▼
-     Feature Engineering
-          │
-          ▼
-     Processed Dataset
-          │
-          ▼
+             │
+             ▼
+    Feature Preparation
+             │
+             ▼
+      Processed Dataset
+             │
+             ▼
 data/processed/processed_data.csv
 ```
 
-Run the pipeline from the project root:
+Run:
 
 ```bash
 python src/pipeline.py
 ```
 
-The pipeline:
+The pipeline is designed to ingest the four raw extracts and generate an analysis-ready processed dataset.
 
-1. Loads the four raw datasets.
-2. Parses and validates dates.
-3. Handles data quality issues.
-4. Integrates sales, SKU, calendar, and inventory data.
-5. Creates analysis-ready features.
-6. Saves the processed dataset.
-
-Output:
-
-```text
-data/processed/processed_data.csv
-```
+This matches the Zidio D1 requirement for a reproducible pipeline that ingests all four extracts and performs coded cleaning and integration.
 
 ---
 
-# 5. Weekly Demand Forecasting
+# 7. Weekly Demand Forecasting
 
-PROJECT FORESIGHT forecasts demand at the weekly SKU level.
+The forecasting target is:
 
-The forecasting workflow is:
+```text
+weekly_units_sold
+```
+
+The forecasting level is:
+
+```text
+SKU-level
+Weekly
+```
+
+The workflow is:
 
 ```text
 processed_data.csv
@@ -245,123 +347,58 @@ Feature Engineering
 Forecasting Models
 ```
 
-The current verified weekly dataset contains:
+The project supports a forecast horizon of:
 
 ```text
-Rows              : 21,000
-SKUs              : 200
-Unique Weeks      : 105
-Start Week        : 2024-01-01
-End Week          : 2025-12-29
-Weeks per SKU     : 105
+6–8 weeks
 ```
 
-The forecasting system supports a **6–8 week forecast horizon**.
+This matches the Zidio scope for weekly SKU-level demand forecasting over a defined horizon such as 6–8 weeks.
 
 ---
 
-# 6. 52-Week Seasonal Naive Baseline
+# 8. 52-Week Seasonal Naive Baseline
 
-PROJECT FORESIGHT uses a **52-week Seasonal Naive** model as the official forecasting baseline.
+The official baseline is:
 
-The baseline uses demand from the same week in the previous year.
+```text
+52-Week Seasonal Naive
+```
 
-The baseline forecast is:
+The baseline predicts demand using the same seasonal period from the previous year.
+
+Conceptually:
 
 ```text
 Forecast(t) = Actual Demand(t - 52 weeks)
 ```
 
-For example:
+Configuration used by the project:
 
 ```text
-Week 53 → Week 1 actual demand
-Week 54 → Week 2 actual demand
-Week 55 → Week 3 actual demand
+Season Length       : 52 weeks
+Forecast Frequency  : Weekly
+Evaluation Metric   : WAPE
 ```
 
-Configuration:
-
-```python
-REQUIRED_SEASON_LENGTH = 52
-```
-
-The 52-week Seasonal Naive baseline is validated before model training.
-
-Every SKU in the current weekly dataset has:
-
-```text
-105 weeks of history
-```
-
-Therefore, the current dataset satisfies the requirement of at least 52 weeks of history.
-
-Baseline configuration:
-
-```text
-Baseline              : 52-week Seasonal Naive
-Season Length         : 52 weeks
-Forecast Frequency    : Weekly
-Forecast Horizon      : 6–8 weeks
-Evaluation Metric     : WAPE
-```
+The Zidio methodology explicitly requires a seasonal-naive baseline before trusting a more complex model.
 
 ---
 
-# 7. Model Training
+# 9. Forecasting Features
 
-The model training workflow is:
+The model uses the following feature groups.
+
+## Calendar Features
 
 ```text
-Weekly Model Data
-        │
-        ▼
-Feature Engineering
-        │
-        ├── Lag Features
-        ├── Rolling Features
-        ├── Seasonal Features
-        ├── Calendar Features
-        └── Inventory Features
-        │
-        ▼
-Rolling-Origin Cross-Validation
-        │
-        ├── 52-Week Seasonal Naive
-        ├── XGBoost
-        └── LightGBM
-        │
-        ▼
-WAPE Comparison
-        │
-        ▼
-Best Production Model
+year
+month
+week
+quarter
+week_sin
+week_cos
 ```
-
-Run model training using:
-
-```bash
-python src/train_model.py
-```
-
-The training process:
-
-1. Loads weekly model data.
-2. Validates 52-week history.
-3. Creates forecasting features.
-4. Creates five Rolling-Origin CV folds.
-5. Evaluates the 52-week Seasonal Naive baseline.
-6. Evaluates XGBoost.
-7. Evaluates LightGBM.
-8. Compares all models using WAPE.
-9. Selects the best-performing production model.
-10. Saves the model artifacts and evaluation results.
-
----
-
-# 8. Forecasting Features
-
-The model uses multiple groups of forecasting features.
 
 ## Lag Features
 
@@ -386,17 +423,6 @@ rolling_mean_12
 rolling_std_4
 ```
 
-## Calendar Features
-
-```text
-year
-month
-week
-quarter
-week_sin
-week_cos
-```
-
 ## Seasonal Feature
 
 ```text
@@ -419,195 +445,29 @@ reorder_point
 sku_id_enc
 ```
 
-The current training run uses **26 features**.
-
----
-
-# 9. Model Evaluation
-
-The forecasting models are evaluated using **Rolling-Origin Cross-Validation** with **WAPE** as the primary metric.
-
-## WAPE
-
-WAPE is calculated as:
+Total current model features:
 
 ```text
-WAPE =
-Sum(|Actual - Forecast|)
------------------------ × 100
-     Sum(|Actual|)
-```
-
-Lower WAPE indicates better forecasting performance.
-
----
-
-# 10. Final Verified Model Results
-
-The latest verified training run produced the following results:
-
-| Model                           |   WAPE |
-| ------------------------------- | -----: |
-| 52-week Seasonal Naive Baseline | 12.17% |
-| XGBoost                         |  8.53% |
-| LightGBM                        |  8.11% |
-
-Detailed verified values:
-
-```text
-52-week Seasonal Naive : 12.1746%
-XGBoost                : 8.5266%
-LightGBM               : 8.1089%
-```
-
-LightGBM is currently the best-performing model.
-
-Therefore:
-
-```text
-Production Model: LightGBM
+26
 ```
 
 ---
 
-# 11. Baseline vs Production Model
+# 10. Forecasting Models
 
-The current verified comparison is:
-
-```text
-52-Week Seasonal Naive
-          VS
-LightGBM
-```
-
-The baseline WAPE is:
+The project evaluates:
 
 ```text
-12.1746%
+1. 52-Week Seasonal Naive
+2. XGBoost
+3. LightGBM
 ```
 
-The LightGBM WAPE is:
+The training script is:
 
 ```text
-8.1089%
+src/train_model.py
 ```
-
-The relative WAPE improvement is:
-
-```text
-33.3947%
-```
-
-Therefore, LightGBM currently provides approximately:
-
-```text
-33.39% relative WAPE improvement
-```
-
-over the 52-week Seasonal Naive baseline.
-
-### Final Evaluation Summary
-
-```text
-Primary Metric:
-WAPE
-
-Baseline:
-52-week Seasonal Naive
-
-Best ML Model:
-LightGBM
-
-Baseline WAPE:
-12.1746%
-
-LightGBM WAPE:
-8.1089%
-
-Relative Improvement:
-33.3947%
-
-Production Model:
-LightGBM
-```
-
-> These values are generated from the latest verified training run. If the model is retrained on changed data or configuration, the README, dashboard, and reports should be updated using the newly generated verified metrics.
-
----
-
-# 12. Rolling-Origin Cross-Validation
-
-The model evaluation uses:
-
-```text
-N_CV_FOLDS = 5
-```
-
-The validation process follows a time-series Rolling-Origin approach.
-
-```text
-Historical Data
-       │
-       ▼
-Training Window
-       │
-       ▼
-Validation Window
-       │
-       ▼
-WAPE
-       │
-       ▼
-Expand Training Window
-       │
-       ▼
-Next Validation Window
-```
-
-Five folds are used to evaluate model performance over different historical periods.
-
-The detailed results are saved to:
-
-```text
-data/processed/rolling_origin_cv_results.csv
-```
-
-This file should not be manually edited.
-
-It is generated automatically by:
-
-```bash
-python src/train_model.py
-```
-
----
-
-# 13. Model Evaluation Output
-
-The model comparison results are saved to:
-
-```text
-data/processed/model_evaluation.csv
-```
-
-The file contains model-level evaluation results including:
-
-* Model name
-* CV WAPE
-* Baseline WAPE
-* WAPE improvement
-* Relative improvement
-* Whether the model beats the baseline
-
-The current ranking is:
-
-```text
-1. LightGBM       → 8.1089%
-2. XGBoost        → 8.5266%
-3. Seasonal Naive → 12.1746%
-```
-
-The file is automatically generated during model training.
 
 Run:
 
@@ -615,314 +475,151 @@ Run:
 python src/train_model.py
 ```
 
-Do not manually change the WAPE values in this file.
+The training process performs:
+
+1. Weekly data preparation
+2. History validation
+3. Feature engineering
+4. Seasonal Naive baseline evaluation
+5. XGBoost evaluation
+6. LightGBM evaluation
+7. Rolling-Origin Cross-Validation
+8. WAPE comparison
+9. Best model selection
+10. Model artifact saving
 
 ---
 
-# 14. Model Metrics
+# 11. Rolling-Origin Cross-Validation
 
-The following file stores the model evaluation metrics:
-
-```text
-models/model_metrics.json
-```
-
-It contains information such as:
+The project uses:
 
 ```text
-Baseline
-Baseline WAPE
-ML model WAPE
-WAPE improvement
-Best ML model
-Production model
-Rolling-Origin folds
-Evaluation metric
+Rolling-Origin Cross-Validation
 ```
 
-The current verified production model is:
+with:
 
 ```text
-lightgbm
+CV Folds : 5
 ```
 
-The current verified metrics are:
+This is appropriate for time-series forecasting because future observations must not be used to train earlier forecasts.
 
-```text
-Baseline WAPE : 12.17%
-LightGBM WAPE : 8.11%
-```
-
-The file is generated automatically by:
-
-```bash
-python src/train_model.py
-```
+The Zidio requirement explicitly states that rolling-origin cross-validation should be used instead of a random train/test split for time-series forecasting.
 
 ---
 
-# 15. Model Metadata
+# 12. WAPE Evaluation
 
-The model metadata file is:
+The primary forecasting metric is:
 
 ```text
-models/model_metadata.json
+WAPE
 ```
 
-It stores information about:
-
-* Project
-* Target
-* Forecast frequency
-* Forecast horizon
-* Required season length
-* Actual season length
-* Baseline
-* Baseline status
-* Features
-* Dataset size
-* Dataset date range
-* Number of weeks
-* Number of SKUs
-* Production model
-
-Current verified metadata includes:
+Formula:
 
 ```text
-Target:
-weekly_units_sold
-
-Forecast Frequency:
-Weekly
-
-Required Season Length:
-52
-
-Actual Season Length:
-52
-
-Baseline:
-52-week Seasonal Naive
-
-Production Model:
-lightgbm
-
-Dataset Rows:
-21000
-
-Unique Weeks:
-105
-
-Unique SKUs:
-200
+WAPE =
+SUM(|Actual - Forecast|)
+----------------------- × 100
+     SUM(|Actual|)
 ```
 
-WAPE metrics are stored separately in:
+Lower WAPE indicates better forecasting performance.
+
+The Zidio brief defines WAPE as the primary accuracy metric for the engagement.
+
+---
+
+# 13. Verified Model Results
+
+The current generated model evaluation file contains:
+
+| Model                  |     WAPE | Beats Baseline |
+| ---------------------- | -------: | -------------- |
+| 52-week Seasonal Naive | 12.1746% | No             |
+| XGBoost                |  8.5266% | Yes            |
+| LightGBM               |  8.1089% | Yes            |
+
+### Detailed Results
 
 ```text
-models/model_metrics.json
+52-week Seasonal Naive WAPE : 12.1746%
+XGBoost WAPE                : 8.5266%
+LightGBM WAPE               : 8.1089%
+```
+
+LightGBM is the current best-performing model.
+
+```text
+Production Model : LightGBM
 ```
 
 ---
 
-# 16. Model Artifacts
+# 14. Baseline Improvement
 
-Trained model artifacts are stored under:
+The verified baseline and LightGBM results are:
+
+```text
+Baseline WAPE : 12.1746%
+LightGBM WAPE : 8.1089%
+```
+
+Absolute WAPE improvement:
+
+```text
+4.0657 percentage points
+```
+
+Relative WAPE improvement:
+
+```text
+33.3947%
+```
+
+Therefore:
+
+```text
+LightGBM
+    ↓
+8.1089% WAPE
+    ↓
+Better than 52-week Seasonal Naive
+```
+
+The Zidio brief requires the model to beat the seasonal-naive baseline on backtest or otherwise report honestly if the baseline wins.
+
+---
+
+# 15. Model Artifacts
+
+Generated model files are stored in:
 
 ```text
 models/
 ```
 
-Important artifacts include:
+Current artifacts:
 
 ```text
 best_model.pkl
 xgboost_model.pkl
 lightgbm_model.pkl
+label_encoder.pkl
 model_metadata.json
 model_metrics.json
-label_encoder.pkl
-```
-
-The production model is saved as:
-
-```text
-models/best_model.pkl
 ```
 
 The current production model is:
 
 ```text
-LightGBM
+models/lightgbm_model.pkl
 ```
 
----
-
-# 17. Inventory Risk Intelligence
-
-PROJECT FORESIGHT calculates inventory risk at SKU level.
-
-The major risk categories are:
-
-```text
-Stockout Risk
-Overstock Risk
-Total Inventory Risk
-```
-
-Risk scoring considers factors such as:
-
-* Forecast demand
-* Available inventory
-* Lead-time demand
-* Inventory coverage
-* Demand pressure
-* Lead-time pressure
-* Projected inventory
-* Inventory position
-
-The generated risk output is:
-
-```text
-data/processed/inventory_risk_scores.csv
-```
-
----
-
-# 18. Reorder Priority
-
-The system identifies SKUs that require replenishment.
-
-Reorder analysis considers:
-
-* Stockout risk
-* Available inventory
-* Forecast demand
-* Lead-time demand
-* Safety stock
-* Reorder requirements
-
-The output is:
-
-```text
-data/processed/reorder_priority_list.csv
-```
-
-This output supports business users in prioritizing replenishment decisions.
-
----
-
-# 19. Markdown / Clear Priority
-
-The system identifies SKUs with excess inventory.
-
-Markdown/Clear analysis considers:
-
-* Overstock risk
-* Excess inventory
-* Inventory coverage
-* Forecast demand
-* Inventory position
-
-The output is:
-
-```text
-data/processed/markdown_clear_priority_list.csv
-```
-
-The output supports decisions such as:
-
-* Markdown
-* Clearance
-* Inventory reduction
-* Promotional action
-
----
-
-# 20. Streamlit Dashboard
-
-PROJECT FORESIGHT includes an interactive Streamlit dashboard.
-
-Run locally:
-
-```bash
-streamlit run app/Home.py
-```
-
-The dashboard provides:
-
-* Executive overview
-* Demand forecast
-* Forecast vs actual analysis
-* Inventory risk
-* Risk scoring
-* Reorder priority
-* Markdown/Clear priority
-* SKU-level analysis
-
-Dashboard filters include:
-
-* Category
-* SKU
-* Risk Level
-* Reorder Priority
-* Markdown/Clear Priority
-
----
-
-# 21. Forecast Dashboard
-
-The forecast dashboard supports comparison between:
-
-```text
-Actual Demand
-       VS
-Forecast Demand
-```
-
-The dashboard can display:
-
-```text
-Actual Demand
-ML Forecast
-52-Week Seasonal Naive
-```
-
-Forecasting is performed at SKU level with a:
-
-```text
-6–8 week forecast horizon
-```
-
-The dashboard should use the same production model and verified model artifacts generated during training.
-
----
-
-# 22. FastAPI Service
-
-PROJECT FORESIGHT provides a FastAPI service for forecasting and inventory risk scoring.
-
-Run locally:
-
-```bash
-uvicorn api.main:app --reload
-```
-
-The API provides endpoints for:
-
-* Demand prediction
-* Inventory risk scoring
-
-Example prediction request:
-
-```json
-{
-    "sku_id": "SKU001",
-    "forecast_weeks": 8
-}
-```
-
-The API uses the trained production model stored in:
+and the selected best model is stored as:
 
 ```text
 models/best_model.pkl
@@ -930,33 +627,352 @@ models/best_model.pkl
 
 ---
 
-# 23. Live Deployment
+# 16. Inventory Risk Scoring
 
-The project supports deployment of both the Streamlit dashboard and FastAPI service.
+The project converts forecast information and inventory position into actionable inventory risk.
 
-At the time of this README version, **no public deployment URL is included unless it has been verified as live and accessible**.
+The risk layer identifies:
 
-### Streamlit Dashboard
+```text
+Stockout Risk
+Overstock Risk
+Overall Risk
+```
 
-Run locally with:
+The Zidio specification requires every SKU to receive a risk assessment and recommended action.
+
+---
+
+# 17. Stockout Risk
+
+Stockout risk considers:
+
+```text
+Forecast Demand
++
+Lead Time
++
+On-Hand Inventory
++
+On-Order Inventory
+```
+
+The API also calculates:
+
+```text
+Lead-Time Demand
+Available Inventory
+Stockout Gap
+Days of Supply
+```
+
+Possible recommendations include:
+
+```text
+URGENTLY REPLENISH STOCK
+PLAN REPLENISHMENT
+NORMAL MONITORING
+```
+
+---
+
+# 18. Overstock Risk
+
+Overstock risk compares forward forecast demand with available inventory.
+
+The system calculates:
+
+```text
+Forward Window Demand
+Excess Inventory Units
+Days of Supply
+```
+
+Possible recommendations include:
+
+```text
+REDUCE INVENTORY / PROMOTE
+MONITOR INVENTORY
+NORMAL MONITORING
+```
+
+---
+
+# 19. Risk Outputs
+
+Processed risk outputs are stored under:
+
+```text
+data/processed/
+```
+
+Files include:
+
+```text
+inventory_risk_scores.csv
+reorder_priority_list.csv
+markdown_clear_priority_list.csv
+```
+
+Additional risk analysis is stored in:
+
+```text
+data/risk_analysis/
+└── sku_risk_analysis.csv
+```
+
+The decisioning grid is stored in:
+
+```text
+data/decisioning_grid/
+└── decisioning_grid.csv
+```
+
+---
+
+# 20. Inventory Decisioning
+
+The project supports three major inventory actions:
+
+```text
+1. Reorder
+2. Markdown / Clear
+3. Monitor
+```
+
+The decisioning concept follows the Zidio framework:
+
+```text
+High Stockout Risk
+        ↓
+Reorder
+
+High Overstock Risk
+        ↓
+Markdown / Clear
+
+Low Risk
+        ↓
+Healthy / Monitor
+```
+
+The Zidio brief describes these decision quadrants as Reorder Now, Markdown/Clear, Watch/Volatile, and Healthy.
+
+---
+
+# 21. Streamlit Dashboard
+
+The dashboard is implemented using Streamlit.
+
+Main application:
+
+```text
+app/Home.py
+```
+
+Run:
 
 ```bash
 streamlit run app/Home.py
 ```
 
-### FastAPI Service
+Dashboard pages:
 
-Run locally with:
-
-```bash
-uvicorn api.main:app --reload
+```text
+app/pages/
+│
+├── 1_Dashboard.py
+├── 2_Forecast.py
+├── 3_Risk_Scoring.py
+└── 4_About.py
 ```
 
-> Public deployment links should only be added to this section after successful deployment and verification. Do not use placeholder URLs or unverified URLs.
+### Dashboard Page 1
+
+```text
+1_Dashboard.py
+```
+
+Provides the main dashboard and project-level inventory intelligence.
+
+### Dashboard Page 2
+
+```text
+2_Forecast.py
+```
+
+Provides:
+
+* Weekly demand forecast
+* Actual vs forecast comparison
+* Model performance comparison
+* Forecast information
+* WAPE-based evaluation
+
+### Dashboard Page 3
+
+```text
+3_Risk_Scoring.py
+```
+
+Provides:
+
+* Business KPIs
+* Inventory risk
+* Business recommendations
+* Priority actions
+* Risk data download
+* Risk history
+* Summary
+
+### Dashboard Page 4
+
+```text
+4_About.py
+```
+
+Provides:
+
+* Project overview
+* Model evaluation
+* Production model
+* Business impact
+* Technology stack
+* Inventory risk intelligence
+* Project workflow
+
+The Zidio dashboard acceptance criteria require category/SKU filtering, forecast vs actual, risk flags and prioritised reorder/markdown views.
 
 ---
 
-# 24. Reports
+# 22. FastAPI Scoring Service
+
+The API is implemented in:
+
+```text
+api.py
+```
+
+There is **no `api/` directory** in the current project.
+
+The FastAPI application object is:
+
+```python
+app
+```
+
+Run locally:
+
+```bash
+uvicorn api:app --reload
+```
+
+or:
+
+```bash
+python api.py
+```
+
+---
+
+# 23. API Endpoints
+
+## Root Endpoint
+
+```text
+GET /
+```
+
+Returns basic service information.
+
+## Health Endpoint
+
+```text
+GET /health
+```
+
+Used to check service and model status.
+
+## Forecast Endpoint
+
+```text
+POST /predict
+```
+
+Returns:
+
+* SKU
+* Forecast horizon
+* Total forecast units
+* Weekly forecast
+* Risk level
+* Risk score
+* Stockout risk score
+* Overstock risk score
+* Primary risk
+* Days of supply
+* Recommendation
+
+## Inventory Scoring Endpoint
+
+```text
+POST /score
+```
+
+Returns:
+
+* Forecast
+* Risk level
+* Risk score
+* Stockout risk
+* Overstock risk
+* Lead-time demand
+* Available inventory
+* Stockout gap
+* Forward-window demand
+* Excess inventory
+* Recommendation
+
+API documentation is available locally at:
+
+```text
+/docs
+```
+
+when the FastAPI service is running.
+
+The Zidio D6 requirement specifies that the scoring service should return forecast and risk for a SKU or batch and handle bad input gracefully.
+
+---
+
+# 24. Deployment Configuration
+
+The project contains:
+
+```text
+Procfile
+render.yaml
+```
+
+The current `Procfile` uses:
+
+```text
+web: uvicorn api:app --host 0.0.0.0 --port $PORT
+```
+
+This is the correct entry point for the current `api.py` structure.
+
+### Important
+
+Public deployment URLs should only be added after successful deployment and verification.
+
+Do not add an unverified or placeholder URL to this README.
+
+The Zidio submission requires a live dashboard URL and live scoring-service URL.
+
+---
+
+# 25. Reports
 
 Project reports are stored under:
 
@@ -964,39 +980,120 @@ Project reports are stored under:
 reports/
 ```
 
-Expected reports include:
+Current report files:
 
 ```text
-model_evaluation_report.pdf
+EDA_Report.pdf
+business_insights.pdf
 business_report.pdf
-executive_summary.pdf
+model_evaluation_report.pdf
+project_report.pdf
+risk_analysis_report.pdf
 ```
 
-Reports cover:
-
-* Model evaluation
-* Forecast accuracy
-* Baseline comparison
-* Inventory risk
-* Reorder recommendations
-* Markdown/Clear recommendations
-* Business impact
-
-All reports should use the same verified model evaluation results.
-
-Current verified forecasting results:
+Additional report data:
 
 ```text
-Baseline WAPE : 12.1746%
-LightGBM WAPE : 8.1089%
-Improvement   : 33.3947%
+feature_importance.csv
+model_metrics.json
 ```
+
+These reports support:
+
+* Data quality analysis
+* EDA
+* Business insights
+* Forecast evaluation
+* Model comparison
+* Inventory risk analysis
+* Business reporting
 
 ---
 
-# 25. Reproducibility
+# 26. Notebooks
 
-To reproduce the project from the project root:
+The project contains:
+
+```text
+notebooks/
+└── EDA.ipynb
+```
+
+The notebook is used for exploratory data analysis and investigation of demand and inventory patterns.
+
+The Zidio D2 requirement includes data-quality findings, seasonality, trend, top movers, dead stock and business-relevant insights.
+
+---
+
+# 27. Source Code Modules
+
+The `src/` directory contains the main data science workflow.
+
+### `pipeline.py`
+
+Runs the main data ingestion, cleaning and processing pipeline.
+
+### `baseline.py`
+
+Implements the Seasonal Naive baseline.
+
+### `train_model.py`
+
+Creates weekly model data, trains forecasting models, performs evaluation and saves model artifacts.
+
+### `feature_engineering.py`
+
+Creates forecasting features.
+
+### `evaluate.py`
+
+Supports forecasting evaluation.
+
+### `predict.py`
+
+Provides prediction functionality used by the API.
+
+### `risk_scoring.py`
+
+Implements inventory risk scoring logic.
+
+### `risk_analysis.py`
+
+Performs SKU-level risk analysis.
+
+### `decisioning_grid.py`
+
+Creates inventory decisioning outputs.
+
+### `business_insights.py`
+
+Generates business-oriented insights.
+
+### `data_loader.py`
+
+Handles data loading.
+
+### `preprocessing.py`
+
+Handles preprocessing tasks.
+
+### `check_inventory_merge.py`
+
+Used for investigating inventory merge and integration.
+
+### `diagnose_inventory.py`
+
+Used for inventory diagnostics.
+
+### `generate_104_week_data.py`
+
+Provides dataset generation functionality for the 104-week dataset workflow.
+
+---
+
+# 28. Reproducibility
+
+The project is designed to run from the project root.
 
 ## Step 1 — Install Dependencies
 
@@ -1010,372 +1107,175 @@ pip install -r requirements.txt
 python src/pipeline.py
 ```
 
-This generates:
-
-```text
-data/processed/processed_data.csv
-```
-
-## Step 3 — Train Forecasting Models
+## Step 3 — Train Models
 
 ```bash
 python src/train_model.py
 ```
 
-This generates or updates:
-
-```text
-data/processed/weekly_model_data.csv
-data/processed/model_evaluation.csv
-data/processed/rolling_origin_cv_results.csv
-
-models/best_model.pkl
-models/model_metadata.json
-models/model_metrics.json
-models/label_encoder.pkl
-```
-
-It also trains and saves:
-
-```text
-models/xgboost_model.pkl
-models/lightgbm_model.pkl
-```
-
-## Step 4 — Run Dashboard
+## Step 4 — Start Streamlit Dashboard
 
 ```bash
 streamlit run app/Home.py
 ```
 
-## Step 5 — Run API
+## Step 5 — Start FastAPI
 
 ```bash
-uvicorn api.main:app --reload
+uvicorn api:app --reload
 ```
 
 ---
 
-# 26. Important Configuration
+# 29. Generated Outputs
 
-The official Seasonal Naive configuration is:
-
-```python
-REQUIRED_SEASON_LENGTH = 52
-```
-
-Rolling-Origin Cross-Validation uses:
-
-```python
-N_CV_FOLDS = 5
-```
-
-Forecast horizon:
+The pipeline and training workflow generate/update:
 
 ```text
-6–8 weeks
+data/processed/
+├── processed_data.csv
+├── weekly_model_data.csv
+├── model_evaluation.csv
+├── rolling_origin_cv_results.csv
+├── inventory_risk_scores.csv
+├── reorder_priority_list.csv
+└── markdown_clear_priority_list.csv
 ```
 
-Primary evaluation metric:
+Model artifacts:
 
 ```text
-WAPE
-```
-
-These settings should remain consistent across:
-
-```text
-src/baseline.py
-src/train_model.py
-src/evaluation.py
-Dashboard
-Reports
-README.md
+models/
+├── best_model.pkl
+├── xgboost_model.pkl
+├── lightgbm_model.pkl
+├── label_encoder.pkl
+├── model_metadata.json
+└── model_metrics.json
 ```
 
 ---
 
-# 27. Data Quality Checks
+# 30. Technology Stack
 
-The project performs validation for:
-
-* Missing dates
-* Invalid dates
-* Duplicate records
-* Missing values
-* Data type consistency
-* SKU availability
-* Time-series coverage
-* Minimum historical coverage
-
-The current weekly dataset contains:
+## Programming
 
 ```text
-200 SKUs
-105 weeks per SKU
-21,000 rows
+Python
 ```
 
-The minimum history requirement for the official baseline is:
+## Data Processing
 
 ```text
-52 weeks
+pandas
+numpy
 ```
 
-Since every SKU currently has 105 weeks of history, the dataset satisfies the 52-week baseline requirement.
-
----
-
-# 28. Official Raw Dataset Structure
-
-The official raw dataset structure is:
+## Machine Learning
 
 ```text
-data/raw/
-│
-├── sales_daily.csv
-├── sku_master.csv
-├── calendar.csv
-└── inventory_snapshots.csv
-```
-
-The project should use these files as the official raw input datasets.
-
-The following obsolete dataset names should not be used in the official documentation:
-
-```text
-store_master.csv
-customer_master.csv
-promotions.csv
-sales_transactions.csv
-inventory_snapshot.csv
-```
-
-Official input files:
-
-```text
-sales_daily.csv
-sku_master.csv
-calendar.csv
-inventory_snapshots.csv
-```
-
----
-
-# 29. Final Model Evaluation Standard
-
-The final project evaluation standard is:
-
-```text
-Primary Metric:
-WAPE
-
-Baseline:
-52-Week Seasonal Naive
-
-Rolling-Origin CV:
-5 Folds
-
-Best ML Model:
+scikit-learn
+XGBoost
 LightGBM
-
-Production Model:
-LightGBM
-
-Forecast Horizon:
-6–8 Weeks
 ```
 
-Current verified results:
+## Forecasting
 
 ```text
-Baseline WAPE : 12.1746%
-XGBoost WAPE  : 8.5266%
-LightGBM WAPE : 8.1089%
-```
-
-Relative LightGBM improvement:
-
-```text
-33.3947%
-```
-
-Therefore:
-
-```text
-LightGBM
-    ↓
-8.1089% WAPE
-    ↓
-Best performing model
-    ↓
-Production Model
-```
-
----
-
-# 30. Business Outputs
-
-PROJECT FORESIGHT produces three major decision-support outputs.
-
-## Demand Forecast
-
-```text
-SKU-level weekly demand forecast
-```
-
-## Inventory Risk
-
-```text
-Stockout Risk
-Overstock Risk
-Total Inventory Risk
-```
-
-## Inventory Actions
-
-```text
-Reorder Priority
-Markdown/Clear Priority
-```
-
-These outputs are designed to support inventory planning and replenishment decisions.
-
----
-
-# 31. Project Workflow
-
-```text
-                 RAW DATA
-                     │
-                     ▼
-        ┌─────────────────────────┐
-        │     Data Pipeline       │
-        │      pipeline.py        │
-        └────────────┬────────────┘
-                     │
-                     ▼
-             Processed Data
-                     │
-                     ▼
-          Weekly Model Dataset
-                     │
-                     ▼
-        ┌─────────────────────────┐
-        │   Feature Engineering   │
-        └────────────┬────────────┘
-                     │
-                     ▼
-        ┌─────────────────────────┐
-        │     Model Training      │
-        │    train_model.py       │
-        └────────────┬────────────┘
-                     │
-          ┌──────────┴──────────┐
-          ▼                     ▼
-  52-Week Seasonal Naive    ML Models
-          │                  │
-          │            ┌─────┴─────┐
-          │            ▼           ▼
-          │         XGBoost     LightGBM
-          │            │           │
-          └────────────┴─────┬─────┘
-                             ▼
-                    Rolling-Origin CV
-                             │
-                             ▼
-                        WAPE Comparison
-                             │
-                             ▼
-                     Best Production Model
-                             │
-                             ▼
-                        Forecasting
-                             │
-                    ┌────────┴────────┐
-                    ▼                 ▼
-             Inventory Risk     Forecast Output
-                    │
-               ┌────┴─────┐
-               ▼          ▼
-            Reorder    Markdown/
-            Priority    Clear
-               │          │
-               └────┬─────┘
-                    ▼
-                Dashboard
-                    │
-                    ▼
-                  API
-```
-
----
-
-# 32. Current Project Status
-
-PROJECT FORESIGHT currently provides an end-to-end workflow covering:
-
-```text
-Data Ingestion
-      ↓
-Data Cleaning
-      ↓
-Data Integration
-      ↓
-Feature Engineering
-      ↓
-Weekly Demand Forecasting
-      ↓
-52-Week Seasonal Naive Baseline
-      ↓
-XGBoost Evaluation
-      ↓
-LightGBM Evaluation
-      ↓
+Seasonal Naive
 Rolling-Origin Cross-Validation
-      ↓
-WAPE Model Comparison
-      ↓
-Production Model Selection
-      ↓
-Inventory Risk Scoring
-      ↓
-Reorder Recommendations
-      ↓
-Markdown/Clear Recommendations
-      ↓
-Streamlit Dashboard
-      ↓
-FastAPI Service
 ```
 
-The current verified production model is:
+## Visualization
 
 ```text
-LightGBM
+Matplotlib
+Seaborn
+Plotly
 ```
 
-with a verified WAPE of:
+## Dashboard
 
 ```text
-8.1089%
+Streamlit
 ```
 
-compared with the 52-week Seasonal Naive baseline WAPE of:
+## API
 
 ```text
-12.1746%
+FastAPI
+Uvicorn
+Pydantic
 ```
 
-This represents a relative WAPE improvement of:
+## Model Persistence
 
 ```text
-33.3947%
+Joblib
+```
+
+## Deployment
+
+```text
+Render configuration
 ```
 
 ---
 
-# 33. Final Verified Configuration
+# 31. Requirements
+
+The project dependencies are maintained in:
+
+```text
+requirements.txt
+```
+
+Current main dependencies include:
+
+```text
+pandas==2.2.3
+numpy==2.2.0
+scikit-learn==1.6.1
+xgboost==2.1.4
+lightgbm==4.6.0
+streamlit==1.44.1
+fastapi==0.115.0
+uvicorn==0.30.6
+pydantic==2.7.4
+plotly==6.0.0
+matplotlib==3.10.0
+seaborn==0.13.2
+joblib==1.4.2
+statsmodels==0.14.4
+```
+
+Install with:
+
+```bash
+pip install -r requirements.txt
+```
+
+---
+
+# 32. Zidio Requirement Mapping
+
+The project maps to the required FORESIGHT deliverables as follows.
+
+| Requirement           | Project Implementation                                      |
+| --------------------- | ----------------------------------------------------------- |
+| D1 Data Pipeline      | `src/pipeline.py`                                           |
+| D2 Data Quality & EDA | `notebooks/EDA.ipynb`, `reports/EDA_Report.pdf`             |
+| D3 Demand Forecast    | `src/train_model.py`, `src/baseline.py`, forecasting models |
+| D4 Risk Scoring       | `src/risk_scoring.py`, `src/risk_analysis.py`               |
+| D5 Planning Dashboard | `app/Home.py`, `app/pages/`                                 |
+| D6 Scoring Service    | `api.py`                                                    |
+| D7 Executive Readout  | `reports/` project/business reports                         |
+
+The seven deliverables are defined by Zidio in Section 04 of the engagement brief.
+
+---
+
+# 33. Model Evaluation Summary
 
 ```text
 Project:
@@ -1402,16 +1302,16 @@ CV Folds:
 Primary Metric:
 WAPE
 
+Baseline WAPE:
+12.1746%
+
 XGBoost WAPE:
 8.5266%
 
 LightGBM WAPE:
 8.1089%
 
-Baseline WAPE:
-12.1746%
-
-Best ML Model:
+Best Model:
 LightGBM
 
 Production Model:
@@ -1426,99 +1326,286 @@ SKUs:
 Historical Weeks:
 105
 
-Dataset Rows:
+Weekly Dataset Rows:
 21,000
 ```
 
 ---
 
-# 34. Important Note About Generated Results
+# 34. Business Decision Outputs
 
-The following files are generated automatically and should not be manually edited:
-
-```text
-data/processed/model_evaluation.csv
-data/processed/rolling_origin_cv_results.csv
-models/model_metrics.json
-models/model_metadata.json
-models/best_model.pkl
-```
-
-To regenerate the model results, run:
-
-```bash
-python src/train_model.py
-```
-
-The training script calculates:
+PROJECT FORESIGHT converts forecasting results into inventory decisions.
 
 ```text
-Baseline WAPE
-XGBoost WAPE
-LightGBM WAPE
-WAPE improvement
-Best production model
+Demand Forecast
+      │
+      ▼
+Inventory Risk
+      │
+      ├── Stockout Risk
+      │        ↓
+      │     Reorder
+      │
+      └── Overstock Risk
+               ↓
+          Markdown / Clear
 ```
 
-directly from the current dataset and Rolling-Origin Cross-Validation results.
+The purpose is not only to generate predictions but also to turn those predictions into actionable inventory decisions.
 
-Therefore, the generated files should be treated as the source of truth for the current model evaluation.
+This follows the Zidio requirement that forecasts should support reorder, clearance and monitoring decisions.
 
 ---
 
-# 35. Quick Start
+# 35. Important Configuration
 
-From the PROJECT_FORESIGHT root directory:
-
-```bash
-pip install -r requirements.txt
-```
-
-Then:
-
-```bash
-python src/pipeline.py
-```
-
-Then:
-
-```bash
-python src/train_model.py
-```
-
-Then start the dashboard:
-
-```bash
-streamlit run app/Home.py
-```
-
-Or start the API:
-
-```bash
-uvicorn api.main:app --reload
-```
-
----
-
-# 36. Conclusion
-
-PROJECT FORESIGHT combines demand forecasting with inventory intelligence to provide SKU-level forecasting, model evaluation, inventory risk identification, and actionable replenishment and clearance recommendations.
-
-The current verified forecasting evaluation demonstrates that LightGBM performs better than the official 52-week Seasonal Naive baseline:
+Current verified forecasting configuration:
 
 ```text
-52-week Seasonal Naive : 12.1746% WAPE
-LightGBM               : 8.1089% WAPE
-Relative Improvement   : 33.3947%
+Season Length       : 52 weeks
+Forecast Frequency  : Weekly
+Forecast Horizon    : 6–8 weeks
+CV Folds            : 5
+Primary Metric      : WAPE
+Production Model    : LightGBM
 ```
 
-Therefore, **LightGBM is the current production forecasting model** for PROJECT FORESIGHT.
-
-The system provides a complete workflow from raw data ingestion to forecasting, risk analysis, inventory decisions, dashboard visualization, and API-based serving.
+The 52-week seasonal baseline must remain consistent across the forecasting workflow.
 
 ---
 
-## Deployment Status
+# 36. Data Quality
+
+The project performs data preparation and validation for:
+
+* Date parsing
+* Missing values
+* Duplicate records
+* Data types
+* SKU consistency
+* Dataset integration
+* Historical coverage
+* Weekly aggregation
+* Inventory merge validation
+
+The Zidio brief expects cleaning decisions to be coded and documented rather than performed manually.
+
+---
+
+# 37. Official Raw Input Files
+
+The official raw input datasets are:
+
+```text
+data/raw/
+│
+├── sales_daily.csv
+├── sku_master.csv
+├── calendar.csv
+└── inventory_snapshots.csv
+```
+
+The project also contains:
+
+```text
+data/raw/sales_daily_104weeks.csv
+```
+
+This file is retained in the project structure, but the official primary sales input documented for the project is:
+
+```text
+sales_daily.csv
+```
+
+---
+
+# 38. Important Project Files
+
+### Main Dashboard
+
+```text
+app/Home.py
+```
+
+### Forecast Page
+
+```text
+app/pages/2_Forecast.py
+```
+
+### Risk Page
+
+```text
+app/pages/3_Risk_Scoring.py
+```
+
+### API
+
+```text
+api.py
+```
+
+### Main Pipeline
+
+```text
+src/pipeline.py
+```
+
+### Model Training
+
+```text
+src/train_model.py
+```
+
+### Baseline
+
+```text
+src/baseline.py
+```
+
+### Prediction
+
+```text
+src/predict.py
+```
+
+### Risk Scoring
+
+```text
+src/risk_scoring.py
+```
+
+---
+
+# 39. Final Workflow
+
+```text
+                    RAW DATA
+                       │
+                       ▼
+              ┌─────────────────┐
+              │ Data Pipeline   │
+              │ pipeline.py     │
+              └────────┬────────┘
+                       │
+                       ▼
+              Processed Dataset
+                       │
+                       ▼
+             Weekly Model Dataset
+                       │
+                       ▼
+             Feature Engineering
+                       │
+                       ▼
+             ┌─────────────────┐
+             │ Model Training  │
+             │ train_model.py  │
+             └────────┬────────┘
+                      │
+          ┌───────────┼───────────┐
+          ▼           ▼           ▼
+      Seasonal      XGBoost    LightGBM
+       Naive
+          │           │           │
+          └───────────┼───────────┘
+                      ▼
+             Rolling-Origin CV
+                      │
+                      ▼
+                 WAPE Compare
+                      │
+                      ▼
+              Best Model Selection
+                      │
+                      ▼
+                  Forecast
+                      │
+                      ▼
+              Inventory Risk
+                      │
+             ┌────────┴────────┐
+             ▼                 ▼
+        Stockout Risk      Overstock Risk
+             │                 │
+             ▼                 ▼
+          Reorder        Markdown / Clear
+             │                 │
+             └────────┬────────┘
+                      ▼
+                  Dashboard
+                      │
+                      ▼
+                    API
+```
+
+---
+
+# 40. Current Project Status
+
+The current project contains the core FORESIGHT workflow:
+
+```text
+Data Ingestion
+      ↓
+Data Cleaning
+      ↓
+Data Integration
+      ↓
+Feature Engineering
+      ↓
+Weekly Demand Forecasting
+      ↓
+52-Week Seasonal Naive Baseline
+      ↓
+XGBoost Evaluation
+      ↓
+LightGBM Evaluation
+      ↓
+Rolling-Origin Cross-Validation
+      ↓
+WAPE Comparison
+      ↓
+Production Model Selection
+      ↓
+Inventory Risk Scoring
+      ↓
+Reorder Prioritization
+      ↓
+Markdown/Clear Prioritization
+      ↓
+Streamlit Dashboard
+      ↓
+FastAPI Scoring Service
+```
+
+Current production forecasting model:
+
+```text
+LightGBM
+```
+
+Current verified WAPE:
+
+```text
+8.1089%
+```
+
+52-week Seasonal Naive baseline:
+
+```text
+12.1746%
+```
+
+Relative WAPE improvement:
+
+```text
+33.3947%
+```
+
+---
+
+# 41. Deployment Status
 
 ```text
 Streamlit Dashboard:
@@ -1527,8 +1614,109 @@ Local deployment supported
 FastAPI Service:
 Local deployment supported
 
-Public URLs:
-Not included until successfully deployed and verified
+Render Configuration:
+Available
+
+Public Dashboard URL:
+Add only after successful deployment and verification
+
+Public API URL:
+Add only after successful deployment and verification
 ```
 
-No placeholder deployment URLs are used in this README.
+No unverified or placeholder public URLs are included.
+
+---
+
+# 42. Submission Checklist
+
+Before final Zidio submission, verify:
+
+* [ ] Git repository is accessible to the mentor
+* [ ] README matches the actual project structure
+* [ ] Pipeline runs successfully from raw data
+* [ ] Model training runs successfully
+* [ ] Seasonal Naive baseline is 52 weeks
+* [ ] Rolling-Origin Cross-Validation is used
+* [ ] WAPE is reported
+* [ ] Production model beats the baseline
+* [ ] Inventory risk scoring works
+* [ ] Reorder recommendations are available
+* [ ] Markdown/Clear recommendations are available
+* [ ] Streamlit dashboard works
+* [ ] Forecast vs Actual is available
+* [ ] API works locally
+* [ ] Public dashboard URL is verified
+* [ ] Public scoring-service URL is verified
+* [ ] Executive readout is ready
+* [ ] EDA/data-quality report is ready
+* [ ] 3–5 minute demo video is ready
+* [ ] Submission form contains all required links
+
+Zidio's submission requirements explicitly include the repository, live dashboard URL, live scoring-service URL, README, executive readout, EDA memo, demo video and submission form.
+
+---
+
+# 43. Conclusion
+
+PROJECT FORESIGHT is an end-to-end demand forecasting and inventory intelligence solution.
+
+The system takes raw sales, SKU, calendar and inventory data and converts it into:
+
+```text
+Demand Forecasts
+       +
+Forecast Evaluation
+       +
+Inventory Risk
+       +
+Reorder Decisions
+       +
+Markdown/Clear Decisions
+       +
+Dashboard
+       +
+API Service
+```
+
+The current verified forecasting results are:
+
+```text
+52-week Seasonal Naive : 12.1746% WAPE
+XGBoost                : 8.5266% WAPE
+LightGBM               : 8.1089% WAPE
+```
+
+Therefore:
+
+```text
+Best Model:
+LightGBM
+
+Production Model:
+LightGBM
+
+Relative Improvement:
+33.3947%
+```
+
+The project follows the core FORESIGHT objective of turning raw business data into forecasting and inventory decisions that can be used by non-technical stakeholders.
+
+---
+
+## Project Information
+
+```text
+Project Name : PROJECT FORESIGHT
+Domain       : Data Science & Analytics
+Focus        : Demand Forecasting & Inventory Intelligence
+Forecast     : Weekly SKU-level
+Baseline     : 52-week Seasonal Naive
+Model        : LightGBM
+Metric       : WAPE
+Dashboard    : Streamlit
+API          : FastAPI
+Deployment   : Render configuration available
+```
+
+**PROJECT FORESIGHT — Demand & Inventory Intelligence**
