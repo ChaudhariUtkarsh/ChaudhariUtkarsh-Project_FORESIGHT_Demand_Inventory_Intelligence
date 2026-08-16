@@ -62,7 +62,7 @@ PROJECT FORESIGHT provides:
 
 # 3. Project Structure
 
-The following structure reflects the **actual project ZIP structure**.
+The following structure reflects the actual project ZIP structure.
 
 ```text
 Project_FORESIGHT/
@@ -173,8 +173,6 @@ data/raw/
 └── inventory_snapshots.csv
 ```
 
-The Zidio brief defines these four provided extracts as the core project data sources.
-
 ## Dataset Description
 
 | Dataset                   | Purpose                                                                  |
@@ -227,8 +225,6 @@ Contains inventory information including:
 * On-order units
 * Lead time
 * Reorder point
-
-These fields correspond to the data dictionary specified by Zidio.
 
 ---
 
@@ -310,8 +306,6 @@ python src/pipeline.py
 
 The pipeline is designed to ingest the four raw extracts and generate an analysis-ready processed dataset.
 
-This matches the Zidio D1 requirement for a reproducible pipeline that ingests all four extracts and performs coded cleaning and integration.
-
 ---
 
 # 7. Weekly Demand Forecasting
@@ -329,7 +323,13 @@ SKU-level
 Weekly
 ```
 
-The workflow is:
+The project supports a forecast horizon of:
+
+```text
+6–8 weeks
+```
+
+Workflow:
 
 ```text
 processed_data.csv
@@ -346,14 +346,6 @@ Feature Engineering
         ▼
 Forecasting Models
 ```
-
-The project supports a forecast horizon of:
-
-```text
-6–8 weeks
-```
-
-This matches the Zidio scope for weekly SKU-level demand forecasting over a defined horizon such as 6–8 weeks.
 
 ---
 
@@ -381,13 +373,9 @@ Forecast Frequency  : Weekly
 Evaluation Metric   : WAPE
 ```
 
-The Zidio methodology explicitly requires a seasonal-naive baseline before trusting a more complex model.
-
 ---
 
 # 9. Forecasting Features
-
-The model uses the following feature groups.
 
 ## Calendar Features
 
@@ -506,8 +494,6 @@ CV Folds : 5
 
 This is appropriate for time-series forecasting because future observations must not be used to train earlier forecasts.
 
-The Zidio requirement explicitly states that rolling-origin cross-validation should be used instead of a random train/test split for time-series forecasting.
-
 ---
 
 # 12. WAPE Evaluation
@@ -528,8 +514,6 @@ SUM(|Actual - Forecast|)
 ```
 
 Lower WAPE indicates better forecasting performance.
-
-The Zidio brief defines WAPE as the primary accuracy metric for the engagement.
 
 ---
 
@@ -590,8 +574,6 @@ LightGBM
 Better than 52-week Seasonal Naive
 ```
 
-The Zidio brief requires the model to beat the seasonal-naive baseline on backtest or otherwise report honestly if the baseline wins.
-
 ---
 
 # 15. Model Artifacts
@@ -639,7 +621,7 @@ Overstock Risk
 Overall Risk
 ```
 
-The Zidio specification requires every SKU to receive a risk assessment and recommended action.
+The system assigns every SKU a risk assessment and recommended action.
 
 ---
 
@@ -740,7 +722,7 @@ The project supports three major inventory actions:
 3. Monitor
 ```
 
-The decisioning concept follows the Zidio framework:
+The decisioning concept follows:
 
 ```text
 High Stockout Risk
@@ -755,8 +737,6 @@ Low Risk
         ↓
 Healthy / Monitor
 ```
-
-The Zidio brief describes these decision quadrants as Reorder Now, Markdown/Clear, Watch/Volatile, and Healthy.
 
 ---
 
@@ -841,11 +821,82 @@ Provides:
 * Inventory risk intelligence
 * Project workflow
 
-The Zidio dashboard acceptance criteria require category/SKU filtering, forecast vs actual, risk flags and prioritised reorder/markdown views.
+---
+
+# 22. Live Deployment
+
+The project has been deployed and the following live services are available.
+
+## Live Dashboard
+
+**Streamlit Dashboard:**
+
+https://chaudhariutkarsh-projectforesightdemandinventoryintell-7ugnsft.streamlit.app/
+
+The Streamlit dashboard provides:
+
+* Project overview
+* Demand forecasting
+* Forecast vs Actual analysis
+* Model evaluation
+* Inventory risk scoring
+* Reorder prioritization
+* Markdown/Clear prioritization
+* Business recommendations
 
 ---
 
-# 22. FastAPI Scoring Service
+## Live Scoring Service
+
+**FastAPI Scoring Service:**
+
+https://project-foresight-api-16bv.onrender.com
+
+The live API provides the production scoring service for forecast and inventory risk analysis.
+
+---
+
+## API Documentation (Swagger)
+
+**Interactive Swagger Documentation:**
+
+https://project-foresight-api-16bv.onrender.com/docs
+
+The Swagger interface provides interactive documentation for the available FastAPI endpoints, including:
+
+```text
+GET  /
+GET  /health
+POST /predict
+POST /score
+```
+
+---
+
+## API Health Check
+
+**Health Check Endpoint:**
+
+https://project-foresight-api-16bv.onrender.com/health
+
+This endpoint is used to verify that the deployed API service is running and that the required model/service components are available.
+
+---
+
+## Live Deployment Summary
+
+| Service                   | URL                                                                                   |
+| ------------------------- | ------------------------------------------------------------------------------------- |
+| Streamlit Dashboard       | https://chaudhariutkarsh-projectforesightdemandinventoryintell-7ugnsft.streamlit.app/ |
+| FastAPI Scoring Service   | https://project-foresight-api-16bv.onrender.com                                       |
+| Swagger API Documentation | https://project-foresight-api-16bv.onrender.com/docs                                  |
+| API Health Check          | https://project-foresight-api-16bv.onrender.com/health                                |
+
+These URLs can be used for project demonstration, mentor review, testing, and final Zidio submission.
+
+---
+
+# 23. FastAPI Scoring Service
 
 The API is implemented in:
 
@@ -853,7 +904,7 @@ The API is implemented in:
 api.py
 ```
 
-There is **no `api/` directory** in the current project.
+There is **no ****`api/`**** directory** in the current project.
 
 The FastAPI application object is:
 
@@ -875,7 +926,7 @@ python api.py
 
 ---
 
-# 23. API Endpoints
+# 24. API Endpoints
 
 ## Root Endpoint
 
@@ -933,19 +984,23 @@ Returns:
 * Excess inventory
 * Recommendation
 
-API documentation is available locally at:
+### API Documentation
+
+Local Swagger:
 
 ```text
-/docs
+http://127.0.0.1:8000/docs
 ```
 
-when the FastAPI service is running.
+Live Swagger:
 
-The Zidio D6 requirement specifies that the scoring service should return forecast and risk for a SKU or batch and handle bad input gracefully.
+```text
+https://project-foresight-api-16bv.onrender.com/docs
+```
 
 ---
 
-# 24. Deployment Configuration
+# 25. Deployment Configuration
 
 The project contains:
 
@@ -962,17 +1017,25 @@ web: uvicorn api:app --host 0.0.0.0 --port $PORT
 
 This is the correct entry point for the current `api.py` structure.
 
-### Important
+### Deployment Services
 
-Public deployment URLs should only be added after successful deployment and verification.
+```text
+Streamlit Dashboard:
+https://chaudhariutkarsh-projectforesightdemandinventoryintell-7ugnsft.streamlit.app/
 
-Do not add an unverified or placeholder URL to this README.
+FastAPI Service:
+https://project-foresight-api-16bv.onrender.com
 
-The Zidio submission requires a live dashboard URL and live scoring-service URL.
+Swagger Documentation:
+https://project-foresight-api-16bv.onrender.com/docs
+
+Health Check:
+https://project-foresight-api-16bv.onrender.com/health
+```
 
 ---
 
-# 25. Reports
+# 26. Reports
 
 Project reports are stored under:
 
@@ -1010,7 +1073,7 @@ These reports support:
 
 ---
 
-# 26. Notebooks
+# 27. Notebooks
 
 The project contains:
 
@@ -1021,13 +1084,9 @@ notebooks/
 
 The notebook is used for exploratory data analysis and investigation of demand and inventory patterns.
 
-The Zidio D2 requirement includes data-quality findings, seasonality, trend, top movers, dead stock and business-relevant insights.
-
 ---
 
-# 27. Source Code Modules
-
-The `src/` directory contains the main data science workflow.
+# 28. Source Code Modules
 
 ### `pipeline.py`
 
@@ -1091,7 +1150,7 @@ Provides dataset generation functionality for the 104-week dataset workflow.
 
 ---
 
-# 28. Reproducibility
+# 29. Reproducibility
 
 The project is designed to run from the project root.
 
@@ -1127,7 +1186,7 @@ uvicorn api:app --reload
 
 ---
 
-# 29. Generated Outputs
+# 30. Generated Outputs
 
 The pipeline and training workflow generate/update:
 
@@ -1156,7 +1215,7 @@ models/
 
 ---
 
-# 30. Technology Stack
+# 31. Technology Stack
 
 ## Programming
 
@@ -1217,12 +1276,13 @@ Joblib
 ## Deployment
 
 ```text
-Render configuration
+Streamlit Community Cloud
+Render
 ```
 
 ---
 
-# 31. Requirements
+# 32. Requirements
 
 The project dependencies are maintained in:
 
@@ -1257,7 +1317,7 @@ pip install -r requirements.txt
 
 ---
 
-# 32. Zidio Requirement Mapping
+# 33. Zidio Requirement Mapping
 
 The project maps to the required FORESIGHT deliverables as follows.
 
@@ -1271,11 +1331,9 @@ The project maps to the required FORESIGHT deliverables as follows.
 | D6 Scoring Service    | `api.py`                                                    |
 | D7 Executive Readout  | `reports/` project/business reports                         |
 
-The seven deliverables are defined by Zidio in Section 04 of the engagement brief.
-
 ---
 
-# 33. Model Evaluation Summary
+# 34. Model Evaluation Summary
 
 ```text
 Project:
@@ -1332,7 +1390,7 @@ Weekly Dataset Rows:
 
 ---
 
-# 34. Business Decision Outputs
+# 35. Business Decision Outputs
 
 PROJECT FORESIGHT converts forecasting results into inventory decisions.
 
@@ -1353,11 +1411,9 @@ Inventory Risk
 
 The purpose is not only to generate predictions but also to turn those predictions into actionable inventory decisions.
 
-This follows the Zidio requirement that forecasts should support reorder, clearance and monitoring decisions.
-
 ---
 
-# 35. Important Configuration
+# 36. Important Configuration
 
 Current verified forecasting configuration:
 
@@ -1374,7 +1430,7 @@ The 52-week seasonal baseline must remain consistent across the forecasting work
 
 ---
 
-# 36. Data Quality
+# 37. Data Quality
 
 The project performs data preparation and validation for:
 
@@ -1392,7 +1448,7 @@ The Zidio brief expects cleaning decisions to be coded and documented rather tha
 
 ---
 
-# 37. Official Raw Input Files
+# 38. Official Raw Input Files
 
 The official raw input datasets are:
 
@@ -1419,7 +1475,7 @@ sales_daily.csv
 
 ---
 
-# 38. Important Project Files
+# 39. Important Project Files
 
 ### Main Dashboard
 
@@ -1477,7 +1533,7 @@ src/risk_scoring.py
 
 ---
 
-# 39. Final Workflow
+# 40. Final Workflow
 
 ```text
                     RAW DATA
@@ -1541,7 +1597,7 @@ src/risk_scoring.py
 
 ---
 
-# 40. Current Project Status
+# 41. Current Project Status
 
 The current project contains the core FORESIGHT workflow:
 
@@ -1605,30 +1661,57 @@ Relative WAPE improvement:
 
 ---
 
-# 41. Deployment Status
+# 42. Deployment Status
+
+## Live Dashboard
 
 ```text
-Streamlit Dashboard:
-Local deployment supported
-
-FastAPI Service:
-Local deployment supported
-
-Render Configuration:
-Available
-
-Public Dashboard URL:
-Add only after successful deployment and verification
-
-Public API URL:
-Add only after successful deployment and verification
+https://chaudhariutkarsh-projectforesightdemandinventoryintell-7ugnsft.streamlit.app/
 ```
 
-No unverified or placeholder public URLs are included.
+## Live Scoring Service
+
+```text
+https://project-foresight-api-16bv.onrender.com
+```
+
+## API Documentation (Swagger)
+
+```text
+https://project-foresight-api-16bv.onrender.com/docs
+```
+
+## API Health Check
+
+```text
+https://project-foresight-api-16bv.onrender.com/health
+```
+
+### Deployment Summary
+
+```text
+Streamlit Dashboard
+        ↓
+Live and available for demonstration
+
+FastAPI Scoring Service
+        ↓
+Live and available for API scoring
+
+Swagger Documentation
+        ↓
+Live and available for API testing
+
+Health Check
+        ↓
+Live and available for service monitoring
+```
+
+These URLs are included for final demonstration, mentor review, testing, and Zidio submission.
 
 ---
 
-# 42. Submission Checklist
+# 43. Submission Checklist
 
 Before final Zidio submission, verify:
 
@@ -1646,18 +1729,18 @@ Before final Zidio submission, verify:
 * [ ] Streamlit dashboard works
 * [ ] Forecast vs Actual is available
 * [ ] API works locally
-* [ ] Public dashboard URL is verified
-* [ ] Public scoring-service URL is verified
+* [ ] Public dashboard URL is available
+* [ ] Public scoring-service URL is available
+* [ ] Swagger documentation URL is available
+* [ ] API health-check URL is available
 * [ ] Executive readout is ready
 * [ ] EDA/data-quality report is ready
 * [ ] 3–5 minute demo video is ready
 * [ ] Submission form contains all required links
 
-Zidio's submission requirements explicitly include the repository, live dashboard URL, live scoring-service URL, README, executive readout, EDA memo, demo video and submission form.
-
 ---
 
-# 43. Conclusion
+# 44. Conclusion
 
 PROJECT FORESIGHT is an end-to-end demand forecasting and inventory intelligence solution.
 
@@ -1716,7 +1799,7 @@ Model        : LightGBM
 Metric       : WAPE
 Dashboard    : Streamlit
 API          : FastAPI
-Deployment   : Render configuration available
+Deployment   : Streamlit Community Cloud + Render
 ```
 
 **PROJECT FORESIGHT — Demand & Inventory Intelligence**
