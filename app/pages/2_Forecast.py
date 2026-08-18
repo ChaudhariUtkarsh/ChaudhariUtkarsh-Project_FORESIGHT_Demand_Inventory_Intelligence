@@ -43,7 +43,7 @@ if history.empty:
     st.stop()
 
 
-required_columns = ["sku_id", "week_start", "units_sold"]
+required_columns = ["sku_id", "week_start", "weekly_units_sold"]
 missing_columns = [col for col in required_columns if col not in history.columns]
 
 if missing_columns:
@@ -75,12 +75,12 @@ def calculate_wape(actual, predicted):
 def create_seasonal_naive(df, season_length=52):
     result = df.copy()
     result = result.sort_values(["sku_id", "week_start"]).reset_index(drop=True)
-    result["seasonal_naive"] = (result.groupby("sku_id")["units_sold"].shift(season_length))
+    result["seasonal_naive"] = result.groupby("sku_id")["weekly_units_sold"].shift(season_length)
     return result
 
 baseline_history = create_seasonal_naive(history, season_length=52)
-baseline_valid = baseline_history.dropna(subset=["units_sold", "seasonal_naive"])
-baseline_wape = calculate_wape(baseline_valid["units_sold"], baseline_valid["seasonal_naive"])
+baseline_valid = baseline_history.dropna(subset=["weekly_units_sold", "seasonal_naive"])
+baseline_wape = calculate_wape(baseline_valid["weekly_units_sold"], baseline_valid["seasonal_naive"])
 
 
 def load_model_metrics():
@@ -189,7 +189,7 @@ sku_history = sku_history.sort_values("week_start")
 last_week = sku_history["week_start"].max()
 
 future_weeks = pd.date_range(start=last_week + pd.Timedelta(weeks=1), periods=forecast_weeks, freq="7D")
-demand_lookup = dict(zip(sku_history["week_start"], sku_history["units_sold"]))
+demand_lookup = dict(zip(sku_history["week_start"], sku_history["weekly_units_sold"]))
 baseline_rows = []
 
 
@@ -224,8 +224,8 @@ st.dataframe(show_df, use_container_width=True, hide_index=True)
 st.subheader("Forecast vs Actual")
 st.caption("Historical actual demand compared with the " "52-week Seasonal Naive baseline and the ML forecast.")
 
-actual_history = sku_history[["week_start", "units_sold"]].copy()
-actual_history = actual_history.rename(columns={"week_start": "date", "units_sold": "actual_demand"})
+actual_history = sku_history[["week_start", "weekly_units_sold"]].copy()
+actual_history = actual_history.rename(columns={"week_start": "date", "weekly_units_sold": "actual_demand"})
 actual_history = actual_history.sort_values("date")
 
 seasonal_history = baseline_history[baseline_history["sku_id"].astype(str) == str(sku_id)].copy()

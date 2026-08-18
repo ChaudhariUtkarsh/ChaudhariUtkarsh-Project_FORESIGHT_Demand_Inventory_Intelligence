@@ -1,4 +1,4 @@
-date,sku_id,units_sold,unit_price,promotion
+date,sku_id,units_sold,unit_price,promo_flag
 2024-01-01,101,25,250.0,0
 2024-01-02,101,33,250.0,0
 2024-01-03,101,27,250.0,0
